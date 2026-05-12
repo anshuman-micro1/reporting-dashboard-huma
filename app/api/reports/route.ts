@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const docs = await collection.find(query, { projection: { _id: 0 } }).sort({ memberName: 1 }).toArray();
     return NextResponse.json(docs);
   } catch (err: unknown) {
+    console.error('[/api/reports]', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   } finally {
     await client.close();
