@@ -10,6 +10,7 @@ export async function POST(req: NextRequest) {
     await runReport(dateStart, dateEnd);
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
+    console.error('[/api/fetch]', err);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   }
 }
