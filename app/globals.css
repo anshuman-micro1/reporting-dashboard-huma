@@ -85,6 +85,37 @@ main { padding: 20px 24px; }
 /* ── TOOLBAR ─────────────────────────────────────────────── */
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 
+/* ── STATS SEPARATOR ────────────────────────────────────────── */
+.stats-sep { width: 1px; background: var(--border); align-self: stretch; margin: 0 4px; flex-shrink: 0; }
+
+.snapshot-card { min-width: unset; flex-direction: row; align-items: center; gap: 20px; }
+.snapshot-header { display: flex; flex-direction: column; gap: 2px; padding-right: 4px; }
+.snapshot-stats { display: flex; align-items: center; gap: 20px; flex-wrap: nowrap; }
+.snapshot-stat { display: flex; flex-direction: column; gap: 2px; min-width: 72px; }
+.snapshot-stat .ds-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+.snapshot-stat .ds-value { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.snapshot-date { background: transparent; border: none; color: var(--text); font-size: 13px; font-weight: 600; padding: 0; outline: none; color-scheme: dark; margin-top: 2px; }
+
+.sync-card { justify-content: center; min-width: 80px; }
+.sync-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s; white-space: nowrap; }
+.sync-btn:hover:not(:disabled) { background: var(--accent-h); }
+.sync-btn:disabled { opacity: .45; cursor: not-allowed; }
+.sync-error { font-size: 10px; color: #f87171; margin-top: 4px; line-height: 1.3; }
+
+/* ── DAILY SNAPSHOT BAR ─────────────────────────────────────── */
+.daily-bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 16px; margin-bottom: 14px;
+}
+.daily-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); white-space: nowrap; }
+.daily-divider { width: 1px; height: 32px; background: var(--border); flex-shrink: 0; }
+.daily-stat { display: flex; flex-direction: column; gap: 2px; min-width: 90px; }
+.daily-stat .ds-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+.daily-stat .ds-value { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.download-btn { margin-left: auto; display: flex; align-items: center; gap: 7px; text-decoration: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; padding: 8px 16px; }
+
 .input-wrap { position: relative; flex: 1; min-width: 220px; max-width: 380px; }
 .input-wrap svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 
