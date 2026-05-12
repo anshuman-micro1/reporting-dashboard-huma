@@ -54,6 +54,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 export default function Dashboard() {
   const [allRows, setAllRows] = useState<ReportRow[]>([]);
   const [allDateCols, setAllDateCols] = useState<string[]>([]);
+  const [masterDateCols, setMasterDateCols] = useState<string[]>([]);
   const [visDateCols, setVisDateCols] = useState<string[]>([]);
   const [rangeActive, setRangeActive] = useState(false);
   const [search, setSearch] = useState('');
@@ -76,6 +77,9 @@ export default function Dashboard() {
   const [syncDone, setSyncDone] = useState(false);
   const [dailyReport, setDailyReport] = useState<{ total_time: string; average_activity: string; average_hours_per_member: string } | null>(null);
   const [dailyReportLoading, setDailyReportLoading] = useState(false);
+  const [sortCol, setSortCol] = useState<'name' | 'activity' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
@@ -93,15 +97,17 @@ export default function Dashboard() {
   useEffect(() => { dateToRef.current = dateTo; }, [dateTo]);
 
   // Recompute visDateCols when date filter or allDateCols change
+  // Always use masterDateCols when available so search doesn't drop columns
   useEffect(() => {
-    const visCols = allDateCols.filter(d => {
+    const source = masterDateCols.length ? masterDateCols : allDateCols;
+    const visCols = source.filter(d => {
       if (dateFrom && d < dateFrom) return false;
       if (dateTo && d > dateTo) return false;
       return true;
     });
     setVisDateCols(visCols);
     setRangeActive(!!(dateFrom || dateTo));
-  }, [dateFrom, dateTo, allDateCols]);
+  }, [dateFrom, dateTo, allDateCols, masterDateCols]);
 
   const refresh = useCallback(async (searchTerm: string) => {
     setLoading(true);
@@ -117,12 +123,17 @@ export default function Dashboard() {
       const cols = Array.from(set).sort();
 
       setAllRows(rows);
-      setAllDateCols(cols);
 
-      if (cols.length > 0) {
-        const def = defaultDateRange();
-        setZeroDatesFrom(prev => prev || def.from);
-        setZeroDatesTo(prev => prev || def.to);
+      if (!searchTerm) {
+        setMasterDateCols(cols);
+        setAllDateCols(cols);
+        if (cols.length > 0) {
+          const def = defaultDateRange();
+          setZeroDatesFrom(prev => prev || def.from);
+          setZeroDatesTo(prev => prev || def.to);
+        }
+      } else {
+        setAllDateCols(prev => prev.length ? prev : cols);
       }
 
       setZeroPanelOpen(true);
@@ -243,6 +254,26 @@ export default function Dashboard() {
     }
   };
 
+  const handleSort = (col: 'name' | 'activity') => {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedRows = [...allRows].sort((a, b) => {
+    if (!sortCol) return 0;
+    let cmp = 0;
+    if (sortCol === 'name') {
+      cmp = (a.memberName || '').localeCompare(b.memberName || '');
+    } else {
+      cmp = (parseInt(a.activity) || 0) - (parseInt(b.activity) || 0);
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
   const rangeTagText = rangeActive
     ? `${dateFrom || allDateCols[0] || '…'} → ${dateTo || allDateCols[allDateCols.length - 1] || '…'}`
     : '';
@@ -273,6 +304,15 @@ export default function Dashboard() {
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             Fetch Data
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={async () => {
+              await fetch('/api/auth', { method: 'DELETE' });
+              window.location.href = '/login';
+            }}
+          >
+            Sign out
           </button>
         </div>
       </header>
@@ -440,15 +480,20 @@ export default function Dashboard() {
           <table>
             <thead ref={tableHeadRef}>
               <tr>
-                <th className="col-name">Member</th>
+                <th className="col-name th-sortable" onClick={() => handleSort('name')}>
+                  Member
+                  <span className="sort-icon">{sortCol === 'name' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+                </th>
                 <th className="col-pemail">Personal Email</th>
                 <th className="col-memail">Micro1 Email</th>
+                <th className="th-sortable" onClick={() => handleSort('activity')}>
+                  Activity
+                  <span className="sort-icon">{sortCol === 'activity' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+                </th>
                 <th className={`col-total th-total${rangeActive ? ' filtered' : ''}`}>
                   {rangeActive ? 'Range Total' : 'Total'}
                 </th>
-                <th>Activity</th>
-                <th>Timezone</th>
-                {visDateCols.map(d => {
+                {[...visDateCols].reverse().map(d => {
                   const dt = new Date(d + 'T00:00:00');
                   return (
                     <th key={d} className="date-th" title={d}>
@@ -462,22 +507,22 @@ export default function Dashboard() {
             <tbody ref={tableBodyRef}>
               {loading ? (
                 <tr className="state-row">
-                  <td colSpan={6 + visDateCols.length}>
+                  <td colSpan={5 + visDateCols.length}>
                     <span className="spinner" />Loading…
                   </td>
                 </tr>
               ) : loadError ? (
                 <tr className="state-row">
-                  <td colSpan={6 + visDateCols.length} style={{ color: '#f87171' }}>
+                  <td colSpan={5 + visDateCols.length} style={{ color: '#f87171' }}>
                     Error: {loadError}
                   </td>
                 </tr>
               ) : allRows.length === 0 ? (
                 <tr className="state-row">
-                  <td colSpan={6 + visDateCols.length}>No records found</td>
+                  <td colSpan={5 + visDateCols.length}>No records found</td>
                 </tr>
               ) : (
-                allRows.map(row => {
+                sortedRows.map(row => {
                   const tot = computeTotal(row, visDateCols);
                   const pct = row.activity || '';
                   return (
@@ -485,12 +530,6 @@ export default function Dashboard() {
                       <td className="col-name">{row.memberName || '—'}</td>
                       <td className="col-pemail dim">{row.personalEmail || '—'}</td>
                       <td className="col-memail dim">{row.micro1Email || '—'}</td>
-                      <td
-                        className={`col-total time-cell${rangeActive ? ' filtered' : ''}`}
-                        style={tot === '0:00:00' ? { opacity: 0.35 } : undefined}
-                      >
-                        {tot}
-                      </td>
                       <td>
                         {pct ? (
                           <span className={`pill ${pillClass(pct)}`}>{pct}</span>
@@ -498,8 +537,13 @@ export default function Dashboard() {
                           <span className="dim">—</span>
                         )}
                       </td>
-                      <td className="dim">{row.timezone || '—'}</td>
-                      {visDateCols.map(d => {
+                      <td
+                        className={`col-total time-cell${rangeActive ? ' filtered' : ''}`}
+                        style={tot === '0:00:00' ? { opacity: 0.35 } : undefined}
+                      >
+                        {tot}
+                      </td>
+                      {[...visDateCols].reverse().map(d => {
                         const val = row.dates?.[d] || '0:00:00';
                         return (
                           <td key={d} className={val === '0:00:00' ? 'time-cell zero-time' : 'time-cell'}>

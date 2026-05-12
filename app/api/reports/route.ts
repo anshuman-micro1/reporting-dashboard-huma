@@ -3,6 +3,7 @@ import { MongoClient } from 'mongodb';
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get('search');
+  console.log('[/api/reports] MONGO_URI set:', !!process.env.MONGO_URI, '| MONGO_DB:', process.env.MONGO_DB);
   const client = new MongoClient(process.env.MONGO_URI!);
   try {
     await client.connect();

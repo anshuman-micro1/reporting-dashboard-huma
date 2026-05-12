@@ -294,6 +294,11 @@ table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 /* ── THEAD ───────────────────────────────────────────────── */
 thead { position: sticky; top: 0; z-index: 20; }
 
+.th-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-sortable:hover { color: var(--text); }
+.sort-icon { color: var(--text-faint); font-style: normal; margin-left: 2px; }
+.th-sortable:hover .sort-icon { color: var(--text-dim); }
+
 th {
   background: #0f1220; color: var(--text-dim);
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px;
