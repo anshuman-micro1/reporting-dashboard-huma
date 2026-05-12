@@ -49,6 +49,8 @@ function defaultDateRange(): { from: string; to: string } {
   return { from: fmt(weekAgo), to: fmt(yesterday) };
 }
 
+const TODAY = new Date().toISOString().slice(0, 10);
+
 export default function Dashboard() {
   const [allRows, setAllRows] = useState<ReportRow[]>([]);
   const [allDateCols, setAllDateCols] = useState<string[]>([]);
@@ -268,10 +270,10 @@ export default function Dashboard() {
 
           <div className="date-range">
             <label>From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            <input type="date" value={dateFrom} max={TODAY} onChange={e => setDateFrom(e.target.value)} />
             <span className="sep">→</span>
             <label>To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            <input type="date" value={dateTo} max={TODAY} onChange={e => setDateTo(e.target.value)} />
           </div>
 
           <div className={`range-tag${rangeActive ? ' show' : ''}`}>
@@ -295,10 +297,10 @@ export default function Dashboard() {
               </div>
               <div className="zero-date-filter" id="zero-date-filter" onClick={e => e.stopPropagation()}>
                 <label>From</label>
-                <input type="date" value={zeroDatesFrom} onChange={e => setZeroDatesFrom(e.target.value)} />
+                <input type="date" value={zeroDatesFrom} max={TODAY} onChange={e => setZeroDatesFrom(e.target.value)} />
                 <span className="sep">→</span>
                 <label>To</label>
-                <input type="date" value={zeroDatesTo} onChange={e => setZeroDatesTo(e.target.value)} />
+                <input type="date" value={zeroDatesTo} max={TODAY} onChange={e => setZeroDatesTo(e.target.value)} />
               </div>
               <div className={`zero-chevron${zeroPanelOpen ? ' open' : ''}`}>▼</div>
             </div>
@@ -451,11 +453,11 @@ export default function Dashboard() {
                 <div className="modal-row" style={{ marginBottom: 20 }}>
                   <div className="modal-field">
                     <label>From date</label>
-                    <input type="date" value={fetchDateFrom} onChange={e => setFetchDateFrom(e.target.value)} />
+                    <input type="date" value={fetchDateFrom} max={TODAY} onChange={e => setFetchDateFrom(e.target.value)} />
                   </div>
                   <div className="modal-field">
                     <label>To date</label>
-                    <input type="date" value={fetchDateTo} onChange={e => setFetchDateTo(e.target.value)} />
+                    <input type="date" value={fetchDateTo} max={TODAY} onChange={e => setFetchDateTo(e.target.value)} />
                   </div>
                 </div>
                 {fetchError && <div className="modal-error show">{fetchError}</div>}
