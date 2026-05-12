@@ -71,6 +71,16 @@ export default function Dashboard() {
   const [fetchError, setFetchError] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncError, setSyncError] = useState('');
+  const [syncDone, setSyncDone] = useState(false);
+  const [dailyReport, setDailyReport] = useState<{ total_time: string; average_activity: string; average_hours_per_member: string } | null>(null);
+  const [dailyReportLoading, setDailyReportLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  });
 
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const tableHeadRef = useRef<HTMLTableSectionElement>(null);
@@ -201,12 +211,45 @@ export default function Dashboard() {
     }
   };
 
+  useEffect(() => {
+    if (!selectedDate) return;
+    setDailyReport(null);
+    setDailyReportLoading(true);
+    setSyncDone(false);
+    setSyncError('');
+    fetch(`/api/daily_report?date=${selectedDate}`)
+      .then(r => r.json())
+      .then(data => setDailyReport(data))
+      .catch(() => setDailyReport(null))
+      .finally(() => setDailyReportLoading(false));
+  }, [selectedDate]);
+
+  const handleSync = async () => {
+    if (!selectedDate) return;
+    setSyncLoading(true);
+    setSyncError('');
+    setSyncDone(false);
+    try {
+      const res = await fetch('/api/daily_report', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      // data is { 'YYYY-MM-DD': doc, ... } — update displayed stats if selected date is one of them
+      if (selectedDate && data[selectedDate]) setDailyReport(data[selectedDate]);
+      setSyncDone(true);
+    } catch (err: unknown) {
+      setSyncError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
   const rangeTagText = rangeActive
     ? `${dateFrom || allDateCols[0] || '…'} → ${dateTo || allDateCols[allDateCols.length - 1] || '…'}`
     : '';
 
   const statRange = visDateCols.length ? `${visDateCols[0]} → ${visDateCols[visDateCols.length - 1]}` : '—';
   const statOrg = allRows[0]?.organization || '—';
+
 
   return (
     <>
@@ -251,6 +294,40 @@ export default function Dashboard() {
           <div className="stat-card">
             <div className="label">Organisation</div>
             <div className="value sm">{loading ? '—' : statOrg}</div>
+          </div>
+
+          <div className="stats-sep" />
+
+          <div className="stat-card snapshot-card">
+            <div className="snapshot-header">
+              <div className="label">Daily Snapshot</div>
+              <input type="date" value={selectedDate} max={TODAY} onChange={e => setSelectedDate(e.target.value)} className="snapshot-date" />
+            </div>
+            <div className="snapshot-stats">
+              <div className="snapshot-stat">
+                <span className="ds-label">Total</span>
+                <span className="ds-value">{dailyReportLoading ? '…' : (dailyReport?.total_time ?? '—')}</span>
+              </div>
+              <div className="snapshot-stat">
+                <span className="ds-label">Avg / Member</span>
+                <span className="ds-value">{dailyReportLoading ? '…' : (dailyReport?.average_hours_per_member ?? '—')}</span>
+              </div>
+              <div className="snapshot-stat">
+                <span className="ds-label">Avg Activity</span>
+                <span className="ds-value">{dailyReportLoading ? '…' : (dailyReport?.average_activity ?? '—')}</span>
+              </div>
+              <button className="sync-btn" onClick={handleSync} disabled={syncLoading}>
+                {syncLoading
+                  ? <><span className="spinner" style={{ width: 11, height: 11, marginRight: 5 }} />Syncing…</>
+                  : syncDone ? 'Synced ✓'
+                  : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+                      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                    </svg>Sync</>
+                }
+              </button>
+            </div>
+            {syncError && <span className="sync-error">{syncError}</span>}
           </div>
         </div>
 
