@@ -499,6 +499,111 @@ td.col-total.filtered { border-left: 1px solid #252e55; background: #0e1428 !imp
 }
 .modal-loading p { font-size: 13px; color: var(--text-dim); animation: fade 1.4s ease-in-out infinite; }
 
+/* ── INVESTIGATE BUTTON ──────────────────────────────────── */
+.col-actions { min-width: 110px; }
+
+.investigate-btn {
+  background: #1e1a2e; border: 1px solid #4a3580;
+  color: #a78bfa; border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.investigate-btn:hover { background: #2e1f5e; border-color: #7c5af0; color: #c4b5fd; }
+.investigate-btn.investigating {
+  background: #1f0f0f; border-color: #7f1d1d;
+  color: #f87171; cursor: not-allowed; opacity: 1;
+}
+
+tr.row-investigating,
+tr.row-investigating:nth-child(odd),
+tr.row-investigating:nth-child(even) {
+  background: #1a0f0f !important;
+}
+tr.row-investigating td { border-bottom-color: #3d1515; }
+tr.row-investigating:hover { background: #221010 !important; }
+tr.row-investigating td.col-name { border-left: 3px solid #f87171; }
+
+.inv-nav-btn {
+  text-decoration: none;
+  display: flex; align-items: center;
+}
+
+/* ── INVESTIGATE MODAL ───────────────────────────────────── */
+.inv-member-info {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.inv-info-row { display: flex; align-items: baseline; gap: 10px; }
+.inv-info-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--text-dim); min-width: 110px; flex-shrink: 0;
+}
+.inv-info-value { font-size: 13px; color: var(--text); }
+.inv-info-value.dim { color: var(--text-dim); font-size: 12px; }
+
+.inv-notes-textarea {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 13px;
+  padding: 10px 12px; resize: vertical; outline: none;
+  font-family: inherit; line-height: 1.5;
+  transition: border-color .15s;
+}
+.inv-notes-textarea:focus { border-color: #7c5af0; }
+.inv-notes-textarea::placeholder { color: var(--text-faint); }
+
+.investigate-submit-btn {
+  background: #5b21b6; color: #ede9fe;
+  border: 1px solid #7c3aed; border-radius: var(--radius);
+  padding: 9px 20px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background .15s;
+}
+.investigate-submit-btn:hover:not(:disabled) { background: #6d28d9; }
+.investigate-submit-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── INVESTIGATIONS PAGE ─────────────────────────────────── */
+.inv-page-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+}
+.inv-page-title { font-size: 16px; font-weight: 700; }
+
+.inv-status-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+}
+.inv-status-open   { background: #14532d30; color: #4ade80; border: 1px solid #14532d; }
+.inv-status-closed { background: #1e2138;   color: var(--text-faint); border: 1px solid var(--border); }
+
+.inv-row-closed td { opacity: .55; }
+
+.inv-close-btn {
+  background: #1a0f0f; border: 1px solid #7f1d1d;
+  color: #f87171; border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+.inv-close-btn:hover:not(:disabled) { background: #2d1010; border-color: #ef4444; }
+.inv-close-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.inv-confirm-row {
+  display: flex; align-items: center; gap: 6px;
+}
+.inv-confirm-label { font-size: 11px; font-weight: 600; color: #fbbf24; white-space: nowrap; }
+.inv-confirm-yes {
+  background: #7f1d1d; border: 1px solid #ef4444; color: #fca5a5;
+  border-radius: 5px; padding: 3px 9px; font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: background .15s;
+}
+.inv-confirm-yes:hover { background: #991b1b; }
+.inv-confirm-no {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: 5px; padding: 3px 9px; font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: background .15s;
+}
+.inv-confirm-no:hover { background: var(--border); color: var(--text); }
+
 .modal-error {
   display: none; background: #2d1010; border: 1px solid #5a1f1f;
   border-radius: var(--radius); padding: 10px 14px;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 
 interface ReportRow {
   memberName: string;
@@ -96,6 +97,10 @@ export default function Dashboard() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [huma2Filter, setHuma2Filter] = useState(false);
   const [selectedHDM, setSelectedHDM] = useState('');
+  const [investigateModal, setInvestigateModal] = useState<{
+    open: boolean; row: ReportRow | null; notes: string; saving: boolean; error: string;
+  }>({ open: false, row: null, notes: '', saving: false, error: '' });
+  const [investigatedNames, setInvestigatedNames] = useState<Set<string>>(new Set());
 
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -165,6 +170,15 @@ export default function Dashboard() {
   useEffect(() => {
     refresh('');
   }, [refresh]);
+
+  useEffect(() => {
+    fetch('/api/investigations')
+      .then(r => r.json())
+      .then((data: { name: string; status: string }[]) => {
+        setInvestigatedNames(new Set(data.filter(d => d.status === 'open').map(d => d.name)));
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -279,6 +293,31 @@ export default function Dashboard() {
     }
   };
 
+  const handleInvestigate = async () => {
+    const { row, notes } = investigateModal;
+    if (!row || !notes.trim()) return;
+    setInvestigateModal(p => ({ ...p, saving: true, error: '' }));
+    try {
+      const res = await fetch('/api/investigations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: row.memberName,
+          personalEmail: row.personalEmail,
+          micro1Email: row.micro1Email,
+          notes: notes.trim(),
+          investigationDate: new Date().toISOString().slice(0, 10),
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Unknown error');
+      setInvestigatedNames(prev => new Set(prev).add(row.memberName));
+      setInvestigateModal({ open: false, row: null, notes: '', saving: false, error: '' });
+    } catch (err: unknown) {
+      setInvestigateModal(p => ({ ...p, saving: false, error: err instanceof Error ? err.message : 'Unknown error' }));
+    }
+  };
+
   const handleSort = (col: 'name' | 'activity') => {
     if (sortCol === col) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -322,6 +361,9 @@ export default function Dashboard() {
           Hubstaff Dashboard
         </div>
         <div className="header-right">
+          <Link href="/investigations" className="btn-secondary inv-nav-btn">
+            Investigations
+          </Link>
           <button id="fetch-btn" onClick={() => { setFetchError(''); setModalOpen(true); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -549,6 +591,7 @@ export default function Dashboard() {
                 <th className={`col-total th-total${rangeActive ? ' filtered' : ''}`}>
                   {rangeActive ? 'Range Total' : 'Total'}
                 </th>
+                <th className="col-actions"></th>
                 {[...visDateCols].reverse().map(d => {
                   const dt = new Date(d + 'T00:00:00');
                   return (
@@ -563,26 +606,27 @@ export default function Dashboard() {
             <tbody ref={tableBodyRef}>
               {loading ? (
                 <tr className="state-row">
-                  <td colSpan={6 + visDateCols.length}>
+                  <td colSpan={7 + visDateCols.length}>
                     <span className="spinner" />Loading…
                   </td>
                 </tr>
               ) : loadError ? (
                 <tr className="state-row">
-                  <td colSpan={6 + visDateCols.length} style={{ color: '#f87171' }}>
+                  <td colSpan={7 + visDateCols.length} style={{ color: '#f87171' }}>
                     Error: {loadError}
                   </td>
                 </tr>
               ) : allRows.length === 0 ? (
                 <tr className="state-row">
-                  <td colSpan={6 + visDateCols.length}>No records found</td>
+                  <td colSpan={7 + visDateCols.length}>No records found</td>
                 </tr>
               ) : (
                 sortedRows.map(row => {
                   const tot = computeTotal(row, visDateCols);
                   const pct = row.activity || '';
+                  const isUnderInvestigation = investigatedNames.has(row.memberName);
                   return (
-                    <tr key={row.memberName} {...{ 'data-member': row.memberName || '' }}>
+                    <tr key={row.memberName} {...{ 'data-member': row.memberName || '' }} className={isUnderInvestigation ? 'row-investigating' : undefined}>
                       <td className="col-name">{row.memberName || '—'}</td>
                       <td className="col-pemail dim">{row.personalEmail || '—'}</td>
                       <td className="col-memail dim">{row.micro1Email || '—'}</td>
@@ -599,6 +643,15 @@ export default function Dashboard() {
                         style={tot === '0:00:00' ? { opacity: 0.35 } : undefined}
                       >
                         {tot}
+                      </td>
+                      <td className="col-actions">
+                        <button
+                          className={`investigate-btn${isUnderInvestigation ? ' investigating' : ''}`}
+                          disabled={isUnderInvestigation}
+                          onClick={() => setInvestigateModal({ open: true, row, notes: '', saving: false, error: '' })}
+                        >
+                          {isUnderInvestigation ? 'Investigating' : 'Investigate'}
+                        </button>
                       </td>
                       {[...visDateCols].reverse().map(d => {
                         const val = row.dates?.[d] || '0:00:00';
@@ -662,6 +715,65 @@ export default function Dashboard() {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Investigate Modal */}
+      {investigateModal.open && investigateModal.row && (
+        <div
+          className="modal-overlay open"
+          onClick={e => { if (e.target === e.currentTarget) setInvestigateModal(p => ({ ...p, open: false })); }}
+        >
+          <div className="modal" style={{ width: 440 }}>
+            <div className="modal-title-row">
+              <span className="modal-title">Investigate Member</span>
+              <button className="modal-x-btn" onClick={() => setInvestigateModal(p => ({ ...p, open: false }))}>✕</button>
+            </div>
+
+            <div className="inv-member-info">
+              <div className="inv-info-row">
+                <span className="inv-info-label">Name</span>
+                <span className="inv-info-value">{investigateModal.row.memberName || '—'}</span>
+              </div>
+              <div className="inv-info-row">
+                <span className="inv-info-label">Personal Email</span>
+                <span className="inv-info-value dim">{investigateModal.row.personalEmail || '—'}</span>
+              </div>
+              <div className="inv-info-row">
+                <span className="inv-info-label">Micro1 Email</span>
+                <span className="inv-info-value dim">{investigateModal.row.micro1Email || '—'}</span>
+              </div>
+            </div>
+
+            <div className="modal-field">
+              <label>Notes / Reason</label>
+              <textarea
+                className="inv-notes-textarea"
+                placeholder="Describe the reason for investigation…"
+                value={investigateModal.notes}
+                onChange={e => setInvestigateModal(p => ({ ...p, notes: e.target.value }))}
+                rows={5}
+                autoFocus
+              />
+            </div>
+
+            {investigateModal.error && (
+              <div className="modal-error show">{investigateModal.error}</div>
+            )}
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setInvestigateModal(p => ({ ...p, open: false }))}>
+                Cancel
+              </button>
+              <button
+                className="investigate-submit-btn"
+                onClick={handleInvestigate}
+                disabled={investigateModal.saving || !investigateModal.notes.trim()}
+              >
+                {investigateModal.saving ? 'Saving…' : 'Save Investigation'}
+              </button>
+            </div>
           </div>
         </div>
       )}
