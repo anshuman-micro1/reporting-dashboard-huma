@@ -6,12 +6,16 @@ interface MemberDoc {
   hubstaffName: string;
   personalEmail: string;
   micro1Email: string;
+  hdm: string | null;
+  team: string | null;
 }
 
 interface MemberEntry {
   name: string;
   personalEmail: string;
   micro1Email: string;
+  hdm: string | null;
+  team: string | null;
 }
 
 interface MemberLookup {
@@ -24,6 +28,8 @@ interface MappedMember {
   timezone: string;
   personalEmail: string | null;
   micro1Email: string | null;
+  hdm: string | null;
+  team: string | null;
   totalWorked: string;
   activity: string;
   spentTotal: string;
@@ -57,7 +63,7 @@ async function loadMembersFromDB(
     const docs = (await client
       .db(mongoDb)
       .collection('members')
-      .find({}, { projection: { hubstaffId: 1, hubstaffName: 1, personalEmail: 1, micro1Email: 1, _id: 0 } })
+      .find({}, { projection: { hubstaffId: 1, hubstaffName: 1, personalEmail: 1, micro1Email: 1, hdm: 1, team: 1, _id: 0 } })
       .toArray()) as unknown as MemberDoc[];
 
     return {
@@ -66,6 +72,8 @@ async function loadMembersFromDB(
         name: d.hubstaffName,
         personalEmail: d.personalEmail,
         micro1Email: d.micro1Email,
+        hdm: d.hdm ?? null,
+        team: d.team ?? null,
       })),
     };
   } finally {
@@ -195,6 +203,8 @@ function mapByMemberAndDate(
       timezone: row['time_zone'] || '',
       personalEmail: dir ? dir.personalEmail : null,
       micro1Email: dir ? dir.micro1Email : null,
+      hdm: dir ? dir.hdm : null,
+      team: dir ? dir.team : null,
       totalWorked: row['total_worked'] || '',
       activity: row['activity'] || '',
       spentTotal: row['spent_total'] || '',

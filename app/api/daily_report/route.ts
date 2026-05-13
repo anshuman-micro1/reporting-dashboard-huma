@@ -167,39 +167,24 @@ async function upsertDoc(doc: Record<string, unknown>, mongoUri: string, mongoDb
   }
 }
 
-// ── GET — recent dates: always fresh; older dates: DB first ───
+// ── GET — always serve from daily_report collection ───────────
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get('date');
   if (!date) return NextResponse.json({ error: 'date param required' }, { status: 400 });
 
-  const mongoUri = process.env.MONGO_URI!;
-  const mongoDb  = process.env.MONGO_DB!;
-
-  const recentDates = new Set(lastNDays(2));
-  const isRecent = recentDates.has(date);
-
+  const client = new MongoClient(process.env.MONGO_URI!);
   try {
-    if (!isRecent) {
-      // Older date — return from DB if it exists
-      const client = new MongoClient(mongoUri);
-      try {
-        await client.connect();
-        const existing = await client.db(mongoDb).collection('daily_report')
-          .findOne({ date }, { projection: { _id: 0 } });
-        if (existing) return NextResponse.json(existing);
-      } finally {
-        await client.close();
-      }
-    }
-
-    // Recent date, or older date not in DB — fetch from Hubstaff
-    const doc = await fetchAndBuildDoc(date);
-    await upsertDoc(doc, mongoUri, mongoDb);
-    return NextResponse.json(doc);
+    await client.connect();
+    const existing = await client.db(process.env.MONGO_DB!).collection('daily_report')
+      .findOne({ date }, { projection: { _id: 0 } });
+    if (existing) return NextResponse.json(existing);
+    return NextResponse.json(null);
   } catch (err: unknown) {
     console.error('[GET /api/daily_report]', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  } finally {
+    await client.close();
   }
 }
 

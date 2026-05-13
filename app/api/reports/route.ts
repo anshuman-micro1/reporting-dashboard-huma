@@ -13,7 +13,25 @@ export async function GET(req: NextRequest) {
       const regex = new RegExp(search.trim(), 'i');
       query = { $or: [{ memberName: regex }, { personalEmail: regex }, { micro1Email: regex }] };
     }
-    const docs = await collection.find(query, { projection: { _id: 0 } }).sort({ memberName: 1 }).toArray();
+    const docs = await collection.aggregate([
+      { $match: query },
+      {
+        $lookup: {
+          from: 'members',
+          localField: 'micro1Email',
+          foreignField: 'micro1Email',
+          as: '_m',
+        },
+      },
+      {
+        $addFields: {
+          hdm:  { $ifNull: [{ $arrayElemAt: ['$_m.hdm',  0] }, null] },
+          team: { $ifNull: [{ $arrayElemAt: ['$_m.team', 0] }, null] },
+        },
+      },
+      { $project: { _id: 0, _m: 0 } },
+      { $sort: { memberName: 1 } },
+    ]).toArray();
     return NextResponse.json(docs);
   } catch (err: unknown) {
     console.error('[/api/reports]', err);
