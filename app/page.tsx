@@ -9,6 +9,8 @@ interface ReportRow {
   organization: string;
   timezone: string;
   activity: string;
+  hdm: string | null;
+  team: string | null;
   dates: Record<string, string>;
 }
 
@@ -40,6 +42,11 @@ function pillClass(pct: string): string {
   return 'low';
 }
 
+function formatSnapshotDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
 function defaultDateRange(): { from: string; to: string } {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -50,6 +57,7 @@ function defaultDateRange(): { from: string; to: string } {
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
+
 
 export default function Dashboard() {
   const [allRows, setAllRows] = useState<ReportRow[]>([]);
@@ -75,10 +83,19 @@ export default function Dashboard() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [syncDone, setSyncDone] = useState(false);
-  const [dailyReport, setDailyReport] = useState<{ total_time: string; average_activity: string; average_hours_per_member: string } | null>(null);
+  const [dailyReport, setDailyReport] = useState<{
+    total_time: string;
+    average_activity: string;
+    average_hours_per_member: string;
+    member_data?: Record<string, { total_hours: string; activity: string }>;
+  } | null>(null);
+  const [snapshotModalOpen, setSnapshotModalOpen] = useState(false);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
   const [dailyReportLoading, setDailyReportLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'name' | 'activity' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [huma2Filter, setHuma2Filter] = useState(false);
+  const [selectedHDM, setSelectedHDM] = useState('');
 
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -177,19 +194,27 @@ export default function Dashboard() {
     target.addEventListener('animationend', () => target!.classList.remove('row-highlight'), { once: true });
   };
 
+  const hdmNames = [...new Set(allRows.map(r => r.hdm).filter(Boolean) as string[])].sort();
+
+  const filteredRows = allRows.filter(row => {
+    if (huma2Filter && row.team !== 'huma2') return false;
+    if (selectedHDM && row.hdm !== selectedHDM) return false;
+    return true;
+  });
+
   // Derived: zero-activity members
   const zeroMembers = (() => {
     const rangeCols = allDateCols.filter(d => (!zeroDatesFrom || d >= zeroDatesFrom) && (!zeroDatesTo || d <= zeroDatesTo));
-    if (!rangeCols.length || !allRows.length) return [];
-    return allRows.filter(row => rangeCols.every(d => toSecs(row.dates?.[d] ?? '') === 0));
+    if (!rangeCols.length || !filteredRows.length) return [];
+    return filteredRows.filter(row => rangeCols.every(d => toSecs(row.dates?.[d] ?? '') === 0));
   })();
 
   // Derived: over-threshold members
   const overMembers = (() => {
     const rangeCols = allDateCols.filter(d => (!zeroDatesFrom || d >= zeroDatesFrom) && (!zeroDatesTo || d <= zeroDatesTo));
     const threshSecs = overHours * 3600;
-    if (!rangeCols.length || !allRows.length || threshSecs <= 0) return [];
-    return allRows
+    if (!rangeCols.length || !filteredRows.length || threshSecs <= 0) return [];
+    return filteredRows
       .map(row => {
         let peakSecs = 0, peakDay = '';
         for (const d of rangeCols) {
@@ -263,7 +288,7 @@ export default function Dashboard() {
     }
   };
 
-  const sortedRows = [...allRows].sort((a, b) => {
+  const sortedRows = [...filteredRows].sort((a, b) => {
     if (!sortCol) return 0;
     let cmp = 0;
     if (sortCol === 'name') {
@@ -341,6 +366,12 @@ export default function Dashboard() {
           <div className="stat-card snapshot-card">
             <div className="snapshot-header">
               <div className="label">Daily Snapshot</div>
+              <button
+                className="snapshot-info-btn"
+                title="View member breakdown"
+                disabled={!dailyReport || dailyReportLoading}
+                onClick={() => setSnapshotModalOpen(true)}
+              >i</button>
               <input type="date" value={selectedDate} max={TODAY} onChange={e => setSelectedDate(e.target.value)} className="snapshot-date" />
             </div>
             <div className="snapshot-stats">
@@ -398,9 +429,33 @@ export default function Dashboard() {
             <button onClick={() => { setDateFrom(''); setDateTo(''); }} title="Clear date filter">✕</button>
           </div>
 
+          <div className="filter-group">
+            <button
+              className={`filter-btn${huma2Filter ? ' active' : ''}`}
+              onClick={() => { setHuma2Filter(p => !p); setSelectedHDM(''); }}
+            >
+              huma2 team
+            </button>
+            <select
+              className="hdm-select"
+              value={selectedHDM}
+              onChange={e => {
+                setSelectedHDM(e.target.value);
+                setHuma2Filter(!!e.target.value);
+              }}
+            >
+              <option value="">All HDMs</option>
+              {hdmNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+
           <div className="toolbar-spacer" />
           <span className="result-count">
-            {!loading && `${allRows.length} member${allRows.length !== 1 ? 's' : ''}`}
+            {!loading && (
+              (huma2Filter || selectedHDM)
+                ? `${filteredRows.length} of ${allRows.length} member${allRows.length !== 1 ? 's' : ''}`
+                : `${allRows.length} member${allRows.length !== 1 ? 's' : ''}`
+            )}
           </span>
         </div>
 
@@ -486,7 +541,8 @@ export default function Dashboard() {
                 </th>
                 <th className="col-pemail">Personal Email</th>
                 <th className="col-memail">Micro1 Email</th>
-                <th className="th-sortable" onClick={() => handleSort('activity')}>
+                <th className="col-hdm">HDM</th>
+                <th className="col-activity th-sortable" onClick={() => handleSort('activity')}>
                   Activity
                   <span className="sort-icon">{sortCol === 'activity' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
                 </th>
@@ -507,19 +563,19 @@ export default function Dashboard() {
             <tbody ref={tableBodyRef}>
               {loading ? (
                 <tr className="state-row">
-                  <td colSpan={5 + visDateCols.length}>
+                  <td colSpan={6 + visDateCols.length}>
                     <span className="spinner" />Loading…
                   </td>
                 </tr>
               ) : loadError ? (
                 <tr className="state-row">
-                  <td colSpan={5 + visDateCols.length} style={{ color: '#f87171' }}>
+                  <td colSpan={6 + visDateCols.length} style={{ color: '#f87171' }}>
                     Error: {loadError}
                   </td>
                 </tr>
               ) : allRows.length === 0 ? (
                 <tr className="state-row">
-                  <td colSpan={5 + visDateCols.length}>No records found</td>
+                  <td colSpan={6 + visDateCols.length}>No records found</td>
                 </tr>
               ) : (
                 sortedRows.map(row => {
@@ -530,7 +586,8 @@ export default function Dashboard() {
                       <td className="col-name">{row.memberName || '—'}</td>
                       <td className="col-pemail dim">{row.personalEmail || '—'}</td>
                       <td className="col-memail dim">{row.micro1Email || '—'}</td>
-                      <td>
+                      <td className="col-hdm dim">{row.hdm || '—'}</td>
+                      <td className="col-activity">
                         {pct ? (
                           <span className={`pill ${pillClass(pct)}`}>{pct}</span>
                         ) : (
@@ -608,6 +665,75 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Snapshot Modal */}
+      {snapshotModalOpen && dailyReport && (() => {
+        const activeMembers = Object.entries(dailyReport.member_data ?? {})
+          .filter(([, d]) => toSecs(d.total_hours) > 0)
+          .sort(([, a], [, b]) => toSecs(b.total_hours) - toSecs(a.total_hours));
+
+        const summaryText =
+          `Date: ${formatSnapshotDate(selectedDate)}\n` +
+          `Total Active Members: ${activeMembers.length}\n` +
+          `Total Time Tracked: ${dailyReport.total_time}\n` +
+          `Average per Member: ${dailyReport.average_hours_per_member}\n` +
+          `Average Activity Level: ${dailyReport.average_activity}`;
+
+        const handleCopy = () => {
+          navigator.clipboard.writeText(summaryText).then(() => {
+            setCopiedSnapshot(true);
+            setTimeout(() => setCopiedSnapshot(false), 2000);
+          });
+        };
+
+        return (
+          <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setSnapshotModalOpen(false); }}>
+            <div className="modal modal-snapshot">
+              <div className="modal-title-row">
+                <span className="modal-title">Daily Snapshot — {formatSnapshotDate(selectedDate)}</span>
+                <button className="modal-x-btn" onClick={() => setSnapshotModalOpen(false)}>✕</button>
+              </div>
+
+              <div className="snapshot-summary-block">
+                <pre className="snapshot-summary-text">{summaryText}</pre>
+                <button className="snapshot-copy-btn" onClick={handleCopy} title="Copy to clipboard">
+                  {copiedSnapshot
+                    ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  }
+                </button>
+              </div>
+
+              <div className="snapshot-modal-table-wrap">
+                <table className="snapshot-modal-table">
+                  <thead>
+                    <tr>
+                      <th>Member</th>
+                      <th>Time</th>
+                      <th>Activity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeMembers.map(([name, data]) => (
+                      <tr key={name}>
+                        <td>{name}</td>
+                        <td className="time-cell">{data.total_hours}</td>
+                        <td>
+                          <span className={`pill ${pillClass(data.activity)}`}>{data.activity}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
+                <button className="btn-secondary" onClick={() => setSnapshotModalOpen(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }

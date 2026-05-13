@@ -89,7 +89,8 @@ main { padding: 20px 24px; }
 .stats-sep { width: 1px; background: var(--border); align-self: stretch; margin: 0 4px; flex-shrink: 0; }
 
 .snapshot-card { min-width: unset; flex-direction: row; align-items: center; gap: 20px; }
-.snapshot-header { display: flex; flex-direction: column; gap: 2px; padding-right: 4px; }
+.snapshot-header { display: flex; flex-direction: row; align-items: center; gap: 6px; padding-right: 4px; flex-wrap: wrap; }
+.snapshot-header .label { flex: 1; }
 .snapshot-stats { display: flex; align-items: center; gap: 20px; flex-wrap: nowrap; }
 .snapshot-stat { display: flex; flex-direction: column; gap: 2px; min-width: 72px; }
 .snapshot-stat .ds-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
@@ -148,6 +149,23 @@ input[type="text"]:focus, input[type="date"]:focus { border-color: var(--accent)
 
 .toolbar-spacer { flex: 1; }
 .result-count { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-btn {
+  padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.filter-btn:hover { background: var(--border); color: var(--text); }
+.filter-btn.active {
+  background: #2563eb22; border-color: #3b82f6; color: #93c5fd;
+}
+.hdm-select {
+  padding: 5px 8px; font-size: 12px; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  cursor: pointer; outline: none;
+}
+.hdm-select:focus { border-color: #3b82f6; color: var(--text); }
 
 /* ── ZERO PANEL ─────────────────────────────────────────── */
 #zero-panel {
@@ -318,13 +336,17 @@ th.th-total { color: #a0b4ff; }
 th.th-total.filtered { color: #7090e0; border-left: 1px solid #252e55; background: #0e1428; }
 
 /* ── FROZEN COLUMNS ──────────────────────────────────────── */
-.col-name   { position: sticky; left: 0;    z-index: 10; min-width: 190px; max-width: 190px; }
-.col-pemail { position: sticky; left: 190px; z-index: 10; min-width: 210px; max-width: 210px; }
-.col-memail { position: sticky; left: 400px; z-index: 10; min-width: 210px; max-width: 210px; }
-.col-total  { position: sticky; left: 610px; z-index: 10; min-width: 90px; box-shadow: var(--frozen-shadow); }
+.col-name     { position: sticky; left: 0;    z-index: 10; min-width: 190px; max-width: 190px; }
+.col-pemail   { position: sticky; left: 190px; z-index: 10; min-width: 210px; max-width: 210px; }
+.col-memail   { position: sticky; left: 400px; z-index: 10; min-width: 210px; max-width: 210px; }
+.col-hdm      { position: sticky; left: 610px; z-index: 10; min-width: 130px; max-width: 130px; }
+.col-activity { position: sticky; left: 740px; z-index: 10; min-width: 80px;  max-width: 80px; }
+.col-total    { position: sticky; left: 820px; z-index: 10; min-width: 90px; box-shadow: var(--frozen-shadow); }
 
-thead th.col-name, thead th.col-pemail, thead th.col-memail, thead th.col-total { z-index: 25; }
-td.col-name, td.col-pemail, td.col-memail, td.col-total { background: inherit; }
+thead th.col-name, thead th.col-pemail, thead th.col-memail,
+thead th.col-hdm, thead th.col-activity, thead th.col-total { z-index: 25; }
+td.col-name, td.col-pemail, td.col-memail,
+td.col-hdm, td.col-activity, td.col-total { background: inherit; }
 
 /* ── TBODY ───────────────────────────────────────────────── */
 tbody tr:nth-child(odd)  { background: var(--row-odd);  }
@@ -406,6 +428,47 @@ td.col-total.filtered { border-left: 1px solid #252e55; background: #0e1428 !imp
 }
 
 .modal-title { font-size: 15px; font-weight: 700; }
+
+.modal-snapshot { width: 560px; max-width: 95vw; }
+.modal-title-row { display: flex; align-items: center; justify-content: space-between; }
+.modal-x-btn { background: transparent; border: none; color: var(--text-dim); font-size: 16px; cursor: pointer; padding: 0; line-height: 1; }
+.modal-x-btn:hover { color: var(--text); }
+
+.snapshot-info-btn {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--border); border: none; color: var(--text-dim);
+  font-size: 10px; font-weight: 700; font-style: italic;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background 0.15s, color 0.15s;
+}
+.snapshot-info-btn:hover:not(:disabled) { background: #3b82f6; color: #fff; }
+.snapshot-info-btn:disabled { opacity: 0.3; cursor: default; }
+
+.snapshot-summary-block {
+  position: relative;
+  background: #0d1117; border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 40px 14px 16px;
+}
+.snapshot-summary-text {
+  margin: 0; font-family: inherit; font-size: 13px;
+  line-height: 1.7; color: var(--text); white-space: pre;
+}
+.snapshot-copy-btn {
+  position: absolute; top: 10px; right: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 5px; padding: 4px 6px; cursor: pointer;
+  color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.snapshot-copy-btn:hover { background: var(--border); color: var(--text); }
+
+.snapshot-modal-table-wrap { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.snapshot-modal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.snapshot-modal-table thead { position: sticky; top: 0; z-index: 5; background: var(--surface); }
+.snapshot-modal-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
+.snapshot-modal-table td { padding: 7px 12px; border-bottom: 1px solid #1a1f2e; }
+.snapshot-modal-table tbody tr:last-child td { border-bottom: none; }
+.snapshot-modal-table tbody tr:hover td { background: #161c2d; }
 
 .modal-field { display: flex; flex-direction: column; gap: 6px; }
 .modal-field label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); }
