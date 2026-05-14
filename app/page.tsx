@@ -72,8 +72,9 @@ export default function Dashboard() {
   const [zeroDatesFrom, setZeroDatesFrom] = useState('');
   const [zeroDatesTo, setZeroDatesTo] = useState('');
   const [overHours, setOverHours] = useState(8);
-  const [zeroPanelOpen, setZeroPanelOpen] = useState(true);
-  const [overPanelOpen, setOverPanelOpen] = useState(true);
+  const [zeroPanelOpen, setZeroPanelOpen] = useState(false);
+  const [overPanelOpen, setOverPanelOpen] = useState(false);
+  const [invPanelOpen, setInvPanelOpen] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [fetchDateFrom, setFetchDateFrom] = useState('');
   const [fetchDateTo, setFetchDateTo] = useState('');
@@ -158,8 +159,6 @@ export default function Dashboard() {
         setAllDateCols(prev => prev.length ? prev : cols);
       }
 
-      setZeroPanelOpen(true);
-      setOverPanelOpen(true);
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -240,6 +239,9 @@ export default function Dashboard() {
       .filter(({ peakSecs }) => peakSecs > threshSecs)
       .sort((a, b) => b.peakSecs - a.peakSecs);
   })();
+
+  // Derived: members currently under open investigation
+  const investigatedMembers = filteredRows.filter(row => investigatedNames.has(row.memberName));
 
   const handleFetch = async () => {
     setFetchLoading(true);
@@ -565,6 +567,33 @@ export default function Dashboard() {
                   >
                     <div className="om-name">{row.memberName || '—'}</div>
                     <div className="om-peak">Peak: {peakDay} · {fromSecs(peakSecs)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Under investigation panel */}
+        {!loading && investigatedMembers.length > 0 && (
+          <div id="inv-panel">
+            <div className="inv-panel-header" onClick={() => setInvPanelOpen(p => !p)}>
+              <div className="inv-panel-icon">⚑</div>
+              <div className="inv-panel-title">
+                {investigatedMembers.length} member{investigatedMembers.length > 1 ? 's' : ''} under investigation
+              </div>
+              <div className={`inv-panel-chevron${invPanelOpen ? ' open' : ''}`}>▼</div>
+            </div>
+            <div style={{ display: invPanelOpen ? 'block' : 'none', padding: '0 16px 14px' }}>
+              <div className="inv-panel-grid">
+                {investigatedMembers.map(row => (
+                  <div
+                    key={row.memberName}
+                    className="inv-panel-member"
+                    onClick={() => scrollToMember(row.memberName)}
+                  >
+                    <div className="ipm-name">{row.memberName || '—'}</div>
+                    <div className="ipm-email">{row.micro1Email || row.personalEmail || '—'}</div>
                   </div>
                 ))}
               </div>

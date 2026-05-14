@@ -499,6 +499,48 @@ td.col-total.filtered { border-left: 1px solid #252e55; background: #0e1428 !imp
 }
 .modal-loading p { font-size: 13px; color: var(--text-dim); animation: fade 1.4s ease-in-out infinite; }
 
+/* ── UNDER INVESTIGATION PANEL ──────────────────────────── */
+#inv-panel {
+  background: #130d1e;
+  border: 1px solid #3d1f70;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.inv-panel-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; cursor: pointer; user-select: none;
+}
+.inv-panel-header:hover { background: #1a1228; }
+
+.inv-panel-icon {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #4a1d96;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 11px; color: #ddd6fe;
+}
+
+.inv-panel-title { font-size: 13px; font-weight: 600; color: #c4b5fd; flex: 1; }
+
+.inv-panel-chevron { font-size: 11px; color: #6d28d9; transition: transform .2s; }
+.inv-panel-chevron.open { transform: rotate(180deg); }
+
+.inv-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px; padding-top: 2px;
+}
+
+.inv-panel-member {
+  background: #1a1030; border: 1px solid #3d1f70; border-radius: 6px;
+  padding: 7px 10px; display: flex; flex-direction: column; gap: 2px;
+  cursor: pointer; transition: background .12s, border-color .12s;
+}
+.inv-panel-member:hover { background: #231545; border-color: #7c3aed; }
+.inv-panel-member .ipm-name  { font-size: 12px; font-weight: 600; color: #c4b5fd; }
+.inv-panel-member .ipm-email { font-size: 11px; color: #5b3e8a; }
+
 /* ── INVESTIGATE BUTTON ──────────────────────────────────── */
 .col-actions { min-width: 110px; }
 
