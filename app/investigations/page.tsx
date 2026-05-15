@@ -71,7 +71,7 @@ export default function InvestigationsPage() {
 
       <main>
         <div className="inv-page-header">
-          <h2 className="inv-page-title">Member Investigations</h2>
+          <h2 className="inv-page-title">Expert Investigations</h2>
           <span className="result-count">
             {!loading && `${rows.length} total · ${openCount} open`}
           </span>

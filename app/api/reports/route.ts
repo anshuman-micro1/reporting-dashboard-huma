@@ -3,35 +3,49 @@ import { MongoClient } from 'mongodb';
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get('search');
-  console.log('[/api/reports] MONGO_URI set:', !!process.env.MONGO_URI, '| MONGO_DB:', process.env.MONGO_DB);
   const client = new MongoClient(process.env.MONGO_URI!);
   try {
     await client.connect();
-    const collection = client.db(process.env.MONGO_DB!).collection('reports');
+    const db = client.db(process.env.MONGO_DB!);
+
     let query: object = {};
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), 'i');
-      query = { $or: [{ memberName: regex }, { personalEmail: regex }, { micro1Email: regex }] };
+      query = { $or: [{ hubstaffName: regex }, { personalEmail: regex }, { micro1Email: regex }] };
     }
-    const docs = await collection.aggregate([
+
+    // Use members as the base so all experts appear, even those with no tracked time.
+    // Left-join reports to pull in dates/activity for those who do have data.
+    const docs = await db.collection('members').aggregate([
       { $match: query },
       {
         $lookup: {
-          from: 'members',
-          localField: 'micro1Email',
-          foreignField: 'micro1Email',
-          as: '_m',
+          from: 'reports',
+          localField: 'hubstaffName',
+          foreignField: 'memberName',
+          as: '_r',
         },
       },
       {
-        $addFields: {
-          hdm:  { $ifNull: [{ $arrayElemAt: ['$_m.hdm',  0] }, null] },
-          team: { $ifNull: [{ $arrayElemAt: ['$_m.team', 0] }, null] },
+        $addFields: { _report: { $arrayElemAt: ['$_r', 0] } },
+      },
+      {
+        $project: {
+          _id: 0,
+          memberName:    '$hubstaffName',
+          personalEmail: 1,
+          micro1Email:   1,
+          hdm:           1,
+          team:          1,
+          organization:  { $ifNull: ['$_report.organization', ''] },
+          timezone:      { $ifNull: ['$_report.timezone',     ''] },
+          activity:      { $ifNull: ['$_report.activity',     ''] },
+          dates:         { $ifNull: ['$_report.dates',        {}] },
         },
       },
-      { $project: { _id: 0, _m: 0 } },
       { $sort: { memberName: 1 } },
     ]).toArray();
+
     return NextResponse.json(docs);
   } catch (err: unknown) {
     console.error('[/api/reports]', err);

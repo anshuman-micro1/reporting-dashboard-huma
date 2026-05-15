@@ -74,7 +74,8 @@ export default function Dashboard() {
   const [overHours, setOverHours] = useState(8);
   const [zeroPanelOpen, setZeroPanelOpen] = useState(false);
   const [overPanelOpen, setOverPanelOpen] = useState(false);
-  const [invPanelOpen, setInvPanelOpen] = useState(true);
+  const [invPanelOpen, setInvPanelOpen] = useState(false);
+  const [offbPanelOpen, setOffbPanelOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [fetchDateFrom, setFetchDateFrom] = useState('');
   const [fetchDateTo, setFetchDateTo] = useState('');
@@ -102,6 +103,8 @@ export default function Dashboard() {
     open: boolean; row: ReportRow | null; notes: string; saving: boolean; error: string;
   }>({ open: false, row: null, notes: '', saving: false, error: '' });
   const [investigatedNames, setInvestigatedNames] = useState<Set<string>>(new Set());
+  const [offboardingStatusMap, setOffboardingStatusMap] = useState<Map<string, 'pending' | 'resolved'>>(new Map());
+  const [offboardConfirmRow, setOffboardConfirmRow] = useState<ReportRow | null>(null);
 
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -179,6 +182,17 @@ export default function Dashboard() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch('/api/offboardings')
+      .then(r => r.json())
+      .then((data: { name: string; status: string }[]) => {
+        setOffboardingStatusMap(new Map(
+          data.map(d => [d.name, d.status as 'pending' | 'resolved'])
+        ));
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSearchChange = (value: string) => {
     setSearch(value);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -243,6 +257,9 @@ export default function Dashboard() {
   // Derived: members currently under open investigation
   const investigatedMembers = filteredRows.filter(row => investigatedNames.has(row.memberName));
 
+  // Derived: members with pending offboarding requests (shown in panel)
+  const offboardingMembers = filteredRows.filter(row => offboardingStatusMap.get(row.memberName) === 'pending');
+
   const handleFetch = async () => {
     setFetchLoading(true);
     setFetchError('');
@@ -292,6 +309,21 @@ export default function Dashboard() {
       setSyncError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setSyncLoading(false);
+    }
+  };
+
+  const handleOffboard = async (row: ReportRow) => {
+    setOffboardingStatusMap(prev => new Map(prev).set(row.memberName, 'pending'));
+    try {
+      const res = await fetch('/api/offboardings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: row.memberName, personalEmail: row.personalEmail, micro1Email: row.micro1Email }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Unknown error');
+    } catch {
+      setOffboardingStatusMap(prev => { const m = new Map(prev); m.delete(row.memberName); return m; });
     }
   };
 
@@ -363,6 +395,12 @@ export default function Dashboard() {
           Hubstaff Dashboard
         </div>
         <div className="header-right">
+          <Link href="/members" className="btn-secondary inv-nav-btn">
+            Update Experts
+          </Link>
+          <Link href="/offboardings" className="btn-secondary inv-nav-btn">
+            Offboardings
+          </Link>
           <Link href="/investigations" className="btn-secondary inv-nav-btn">
             Investigations
           </Link>
@@ -389,7 +427,7 @@ export default function Dashboard() {
       <main>
         <div className="stats">
           <div className="stat-card">
-            <div className="label">Members</div>
+            <div className="label">Experts</div>
             <div className="value">{loading ? '—' : allRows.length}</div>
           </div>
           <div className="stat-card">
@@ -412,7 +450,7 @@ export default function Dashboard() {
               <div className="label">Daily Snapshot</div>
               <button
                 className="snapshot-info-btn"
-                title="View member breakdown"
+                title="View expert breakdown"
                 disabled={!dailyReport || dailyReportLoading}
                 onClick={() => setSnapshotModalOpen(true)}
               >i</button>
@@ -424,7 +462,7 @@ export default function Dashboard() {
                 <span className="ds-value">{dailyReportLoading ? '…' : (dailyReport?.total_time ?? '—')}</span>
               </div>
               <div className="snapshot-stat">
-                <span className="ds-label">Avg / Member</span>
+                <span className="ds-label">Avg / Expert</span>
                 <span className="ds-value">{dailyReportLoading ? '…' : (dailyReport?.average_hours_per_member ?? '—')}</span>
               </div>
               <div className="snapshot-stat">
@@ -497,8 +535,8 @@ export default function Dashboard() {
           <span className="result-count">
             {!loading && (
               (huma2Filter || selectedHDM)
-                ? `${filteredRows.length} of ${allRows.length} member${allRows.length !== 1 ? 's' : ''}`
-                : `${allRows.length} member${allRows.length !== 1 ? 's' : ''}`
+                ? `${filteredRows.length} of ${allRows.length} expert${allRows.length !== 1 ? 's' : ''}`
+                : `${allRows.length} expert${allRows.length !== 1 ? 's' : ''}`
             )}
           </span>
         </div>
@@ -509,7 +547,7 @@ export default function Dashboard() {
             <div className="zero-header" onClick={() => setZeroPanelOpen(p => !p)}>
               <div className="zero-icon">⚠</div>
               <div className="zero-title">
-                {zeroMembers.length} member{zeroMembers.length > 1 ? 's' : ''} with no activity
+                {zeroMembers.length} expert{zeroMembers.length > 1 ? 's' : ''} with no activity
               </div>
               <div className="zero-date-filter" id="zero-date-filter" onClick={e => e.stopPropagation()}>
                 <label>From</label>
@@ -543,7 +581,7 @@ export default function Dashboard() {
             <div className="over-header" onClick={() => setOverPanelOpen(p => !p)}>
               <div className="over-icon">↑</div>
               <div className="over-title">
-                {overMembers.length} member{overMembers.length > 1 ? 's' : ''} over {overHours}h on a single day
+                {overMembers.length} expert{overMembers.length > 1 ? 's' : ''} over {overHours}h on a single day
               </div>
               <div className="over-hours-filter" id="over-hours-filter" onClick={e => e.stopPropagation()}>
                 <label>Over</label>
@@ -580,7 +618,7 @@ export default function Dashboard() {
             <div className="inv-panel-header" onClick={() => setInvPanelOpen(p => !p)}>
               <div className="inv-panel-icon">⚑</div>
               <div className="inv-panel-title">
-                {investigatedMembers.length} member{investigatedMembers.length > 1 ? 's' : ''} under investigation
+                {investigatedMembers.length} expert{investigatedMembers.length > 1 ? 's' : ''} under investigation
               </div>
               <div className={`inv-panel-chevron${invPanelOpen ? ' open' : ''}`}>▼</div>
             </div>
@@ -601,13 +639,40 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Offboarding panel */}
+        {!loading && offboardingMembers.length > 0 && (
+          <div id="offb-panel">
+            <div className="offb-panel-header" onClick={() => setOffbPanelOpen(p => !p)}>
+              <div className="offb-panel-icon">↗</div>
+              <div className="offb-panel-title">
+                {offboardingMembers.length} expert{offboardingMembers.length > 1 ? 's' : ''} pending offboarding
+              </div>
+              <div className={`offb-panel-chevron${offbPanelOpen ? ' open' : ''}`}>▼</div>
+            </div>
+            <div style={{ display: offbPanelOpen ? 'block' : 'none', padding: '0 16px 14px' }}>
+              <div className="offb-panel-grid">
+                {offboardingMembers.map(row => (
+                  <div
+                    key={row.memberName}
+                    className="offb-panel-member"
+                    onClick={() => scrollToMember(row.memberName)}
+                  >
+                    <div className="opm-name">{row.memberName || '—'}</div>
+                    <div className="opm-email">{row.micro1Email || row.personalEmail || '—'}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="table-wrap" ref={tableWrapRef}>
           <table>
             <thead ref={tableHeadRef}>
               <tr>
                 <th className="col-name th-sortable" onClick={() => handleSort('name')}>
-                  Member
+                  Expert
                   <span className="sort-icon">{sortCol === 'name' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
                 </th>
                 <th className="col-pemail">Personal Email</th>
@@ -654,8 +719,12 @@ export default function Dashboard() {
                   const tot = computeTotal(row, visDateCols);
                   const pct = row.activity || '';
                   const isUnderInvestigation = investigatedNames.has(row.memberName);
+                  const offbStatus = offboardingStatusMap.get(row.memberName);
+                  const isOffboarding = offbStatus === 'pending';
+                  const isOffboarded = offbStatus === 'resolved';
+                  const rowClass = isOffboarded ? 'row-offboarded' : isOffboarding ? 'row-offboarding' : isUnderInvestigation ? 'row-investigating' : undefined;
                   return (
-                    <tr key={row.memberName} {...{ 'data-member': row.memberName || '' }} className={isUnderInvestigation ? 'row-investigating' : undefined}>
+                    <tr key={row.memberName} {...{ 'data-member': row.memberName || '' }} className={rowClass}>
                       <td className="col-name">{row.memberName || '—'}</td>
                       <td className="col-pemail dim">{row.personalEmail || '—'}</td>
                       <td className="col-memail dim">{row.micro1Email || '—'}</td>
@@ -676,10 +745,17 @@ export default function Dashboard() {
                       <td className="col-actions">
                         <button
                           className={`investigate-btn${isUnderInvestigation ? ' investigating' : ''}`}
-                          disabled={isUnderInvestigation}
+                          disabled={isUnderInvestigation || isOffboarding || isOffboarded}
                           onClick={() => setInvestigateModal({ open: true, row, notes: '', saving: false, error: '' })}
                         >
                           {isUnderInvestigation ? 'Investigating' : 'Investigate'}
+                        </button>
+                        <button
+                          className={`offboard-btn${isOffboarding ? ' offboarding' : isOffboarded ? ' offboarded' : ''}`}
+                          disabled={isOffboarding || isOffboarded}
+                          onClick={() => setOffboardConfirmRow(row)}
+                        >
+                          {isOffboarding ? 'Offboarding' : isOffboarded ? 'Offboarded' : 'Offboard'}
                         </button>
                       </td>
                       {[...visDateCols].reverse().map(d => {
@@ -756,7 +832,7 @@ export default function Dashboard() {
         >
           <div className="modal" style={{ width: 440 }}>
             <div className="modal-title-row">
-              <span className="modal-title">Investigate Member</span>
+              <span className="modal-title">Investigate Expert</span>
               <button className="modal-x-btn" onClick={() => setInvestigateModal(p => ({ ...p, open: false }))}>✕</button>
             </div>
 
@@ -807,6 +883,33 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Offboard Confirm Modal */}
+      {offboardConfirmRow && (
+        <div
+          className="modal-overlay open"
+          onClick={e => { if (e.target === e.currentTarget) setOffboardConfirmRow(null); }}
+        >
+          <div className="modal" style={{ width: 400 }}>
+            <div className="modal-title-row">
+              <span className="modal-title">Confirm Offboarding</span>
+              <button className="modal-x-btn" onClick={() => setOffboardConfirmRow(null)}>✕</button>
+            </div>
+            <p style={{ margin: '16px 0 24px', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.6 }}>
+              Are you sure you want to offboard <strong style={{ color: 'var(--text)' }}>{offboardConfirmRow.memberName}</strong>?
+            </p>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setOffboardConfirmRow(null)}>Cancel</button>
+              <button
+                className="offboard-btn"
+                onClick={() => { handleOffboard(offboardConfirmRow); setOffboardConfirmRow(null); }}
+              >
+                Offboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Snapshot Modal */}
       {snapshotModalOpen && dailyReport && (() => {
         const activeMembers = Object.entries(dailyReport.member_data ?? {})
@@ -815,9 +918,9 @@ export default function Dashboard() {
 
         const summaryText =
           `Date: ${formatSnapshotDate(selectedDate)}\n` +
-          `Total Active Members: ${activeMembers.length}\n` +
+          `Total Active Experts: ${activeMembers.length}\n` +
           `Total Time Tracked: ${dailyReport.total_time}\n` +
-          `Average per Member: ${dailyReport.average_hours_per_member}\n` +
+          `Average per Expert: ${dailyReport.average_hours_per_member}\n` +
           `Average Activity Level: ${dailyReport.average_activity}`;
 
         const handleCopy = () => {
@@ -849,7 +952,7 @@ export default function Dashboard() {
                 <table className="snapshot-modal-table">
                   <thead>
                     <tr>
-                      <th>Member</th>
+                      <th>Expert</th>
                       <th>Time</th>
                       <th>Activity</th>
                     </tr>

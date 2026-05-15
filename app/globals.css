@@ -542,7 +542,7 @@ td.col-total.filtered { border-left: 1px solid #252e55; background: #0e1428 !imp
 .inv-panel-member .ipm-email { font-size: 11px; color: #5b3e8a; }
 
 /* ── INVESTIGATE BUTTON ──────────────────────────────────── */
-.col-actions { min-width: 110px; }
+.col-actions { min-width: 120px; }
 
 .investigate-btn {
   background: #1e1a2e; border: 1px solid #4a3580;
@@ -603,6 +603,110 @@ tr.row-investigating td.col-name { border-left: 3px solid #f87171; }
 }
 .investigate-submit-btn:hover:not(:disabled) { background: #6d28d9; }
 .investigate-submit-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── OFFBOARDING ROW HIGHLIGHT ───────────────────────────── */
+tr.row-offboarding,
+tr.row-offboarding:nth-child(odd),
+tr.row-offboarding:nth-child(even) {
+  background: #0a1628 !important;
+}
+tr.row-offboarding td { border-bottom-color: #1e3a5f; opacity: 0.45; }
+tr.row-offboarding:hover { background: #0d1e38 !important; }
+tr.row-offboarding td.col-name { border-left: 3px solid #3b82f6; }
+
+/* ── OFFBOARDED ROW (resolved) ───────────────────────────── */
+tr.row-offboarded,
+tr.row-offboarded:nth-child(odd),
+tr.row-offboarded:nth-child(even) {
+  background: #0d1117 !important;
+}
+tr.row-offboarded td { border-bottom-color: #1a1f2e; opacity: 0.35; }
+tr.row-offboarded:hover { background: #111520 !important; }
+tr.row-offboarded td.col-name { border-left: 3px solid #334155; }
+
+/* ── OFFBOARD BUTTON ─────────────────────────────────────── */
+.offboard-btn {
+  background: #0a1628; border: 1px solid #1e3a8a;
+  color: #60a5fa; border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; margin-top: 4px;
+  display: block; width: 100%;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.offboard-btn:hover { background: #0f2040; border-color: #3b82f6; color: #93c5fd; }
+.offboard-btn.offboarding {
+  background: #0a1628; border-color: #1e3a8a;
+  color: #3b82f6; cursor: not-allowed; opacity: 1;
+}
+.offboard-btn.offboarded {
+  background: #0d1117; border-color: #1e2535;
+  color: #334155; cursor: not-allowed; opacity: 1;
+}
+
+/* ── OFFBOARDING PANEL ───────────────────────────────────── */
+#offb-panel {
+  background: #080e1a;
+  border: 1px solid #1e3a8a;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.offb-panel-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; cursor: pointer; user-select: none;
+}
+.offb-panel-header:hover { background: #0d1828; }
+.offb-panel-icon {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #1e3a8a;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 11px; color: #bfdbfe;
+}
+.offb-panel-title { font-size: 13px; font-weight: 600; color: #93c5fd; flex: 1; }
+.offb-panel-chevron { font-size: 11px; color: #1e40af; transition: transform .2s; }
+.offb-panel-chevron.open { transform: rotate(180deg); }
+.offb-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px; padding-top: 2px;
+}
+.offb-panel-member {
+  background: #0a1628; border: 1px solid #1e3a8a; border-radius: 6px;
+  padding: 7px 10px; display: flex; flex-direction: column; gap: 2px;
+  cursor: pointer; transition: background .12s, border-color .12s;
+}
+.offb-panel-member:hover { background: #0f2040; border-color: #3b82f6; }
+.offb-panel-member .opm-name  { font-size: 12px; font-weight: 600; color: #93c5fd; }
+.offb-panel-member .opm-email { font-size: 11px; color: #1e3a8a; }
+
+/* ── OFFBOARDING STATUS BADGES ───────────────────────────── */
+.offb-status-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+}
+.offb-status-pending  { background: #1c160a; color: #fbbf24; border: 1px solid #78350f; }
+.offb-status-resolved { background: #14532d30; color: #4ade80; border: 1px solid #14532d; }
+
+/* ── OFFBOARDING PAGE ACTIONS ────────────────────────────── */
+.offb-actions { display: flex; flex-direction: column; gap: 4px; }
+.offb-cancel-btn {
+  background: #1a0f0f; border: 1px solid #7f1d1d;
+  color: #f87171; border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+.offb-cancel-btn:hover:not(:disabled) { background: #2d1010; border-color: #ef4444; }
+.offb-cancel-btn:disabled { opacity: .45; cursor: not-allowed; }
+.offb-confirm-btn {
+  background: #0a1628; border: 1px solid #1e3a8a;
+  color: #60a5fa; border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+.offb-confirm-btn:hover:not(:disabled) { background: #0f2040; border-color: #3b82f6; }
+.offb-confirm-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ── INVESTIGATIONS PAGE ─────────────────────────────────── */
 .inv-page-header {
