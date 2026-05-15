@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import axios from 'axios';
+import { getCachedCredentials, setCachedCredentials } from '@/lib/credentials-cache';
 
 export const maxDuration = 60;
 
@@ -14,8 +15,22 @@ interface PageResponse {
   pagination: { last_page: boolean; next_page: number };
 }
 
-function buildHeaders() {
+async function buildHeaders() {
   const orgId = process.env.HUBSTAFF_ORG_ID!;
+
+  let creds = getCachedCredentials();
+  if (!creds) {
+    const client = new MongoClient(process.env.MONGO_URI!);
+    try {
+      await client.connect();
+      const doc = await client.db(process.env.MONGO_DB!).collection('settings').findOne({ _id: 'hubstaff_credentials' as never });
+      creds = (doc || {}) as Record<string, string>;
+      setCachedCredentials(creds);
+    } finally {
+      await client.close();
+    }
+  }
+  const get = (key: string) => (creds![key] || process.env[key] || '') as string;
   return {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:150.0) Gecko/20100101 Firefox/150.0',
     Accept: 'application/json',
@@ -23,24 +38,24 @@ function buildHeaders() {
     Referer: `https://app.hubstaff.com/reports/${orgId}/team/time_and_activities`,
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
-    'X-CSRF-Token': process.env.HUBSTAFF_CSRF_TOKEN!,
+    'X-CSRF-Token': get('HUBSTAFF_CSRF_TOKEN'),
     Origin: 'https://app.hubstaff.com',
     Connection: 'keep-alive',
     DNT: '1',
     Cookie: [
       `organization=${orgId}`,
-      `__stripe_mid=${process.env.HUBSTAFF_STRIPE_MID}`,
-      `INGRESSCOOKIE=${process.env.HUBSTAFF_INGRESS_COOKIE}`,
-      `XSRF-TOKEN=${process.env.HUBSTAFF_XSRF_TOKEN}`,
-      `_hubstaff_session=${process.env.HUBSTAFF_SESSION}`,
-      `hubstaff_account_refresh=${process.env.HUBSTAFF_ACCOUNT_REFRESH}`,
+      `__stripe_mid=${get('HUBSTAFF_STRIPE_MID')}`,
+      `INGRESSCOOKIE=${get('HUBSTAFF_INGRESS_COOKIE')}`,
+      `XSRF-TOKEN=${get('HUBSTAFF_XSRF_TOKEN')}`,
+      `_hubstaff_session=${get('HUBSTAFF_SESSION')}`,
+      `hubstaff_account_refresh=${get('HUBSTAFF_ACCOUNT_REFRESH')}`,
     ].join('; '),
   };
 }
 
 async function fetchAllMembers(): Promise<HubstaffMember[]> {
   const url = `https://app.hubstaff.com/reports/${process.env.HUBSTAFF_ORG_ID}/members?filters%5Bappend_removed_label%5D=true`;
-  const headers = buildHeaders();
+  const headers = await buildHeaders();
   const all: HubstaffMember[] = [];
   let page = 1;
 

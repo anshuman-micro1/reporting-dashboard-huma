@@ -395,6 +395,9 @@ export default function Dashboard() {
           Hubstaff Dashboard
         </div>
         <div className="header-right">
+          <Link href="/settings" className="btn-secondary inv-nav-btn">
+            Settings
+          </Link>
           <Link href="/members" className="btn-secondary inv-nav-btn">
             Update Experts
           </Link>

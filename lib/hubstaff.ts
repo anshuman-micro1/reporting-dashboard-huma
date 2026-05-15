@@ -1,5 +1,40 @@
 import axios from 'axios';
 import { MongoClient } from 'mongodb';
+import { getCachedCredentials, setCachedCredentials } from './credentials-cache';
+
+interface HubstaffCredentials {
+  HUBSTAFF_STRIPE_MID: string;
+  HUBSTAFF_XSRF_TOKEN: string;
+  HUBSTAFF_SESSION: string;
+  HUBSTAFF_ACCOUNT_REFRESH: string;
+  HUBSTAFF_INGRESS_COOKIE: string;
+  HUBSTAFF_CSRF_TOKEN: string;
+}
+
+async function loadCredentials(mongoUri: string, mongoDb: string): Promise<HubstaffCredentials> {
+  const cached = getCachedCredentials();
+  if (cached) {
+    return cached as unknown as HubstaffCredentials;
+  }
+
+  const client = new MongoClient(mongoUri);
+  try {
+    await client.connect();
+    const doc = await client.db(mongoDb).collection('settings').findOne({ _id: 'hubstaff_credentials' as never });
+    const creds: HubstaffCredentials = {
+      HUBSTAFF_STRIPE_MID:      (doc?.HUBSTAFF_STRIPE_MID      || process.env.HUBSTAFF_STRIPE_MID)      as string,
+      HUBSTAFF_XSRF_TOKEN:      (doc?.HUBSTAFF_XSRF_TOKEN      || process.env.HUBSTAFF_XSRF_TOKEN)      as string,
+      HUBSTAFF_SESSION:         (doc?.HUBSTAFF_SESSION         || process.env.HUBSTAFF_SESSION)         as string,
+      HUBSTAFF_ACCOUNT_REFRESH: (doc?.HUBSTAFF_ACCOUNT_REFRESH || process.env.HUBSTAFF_ACCOUNT_REFRESH) as string,
+      HUBSTAFF_INGRESS_COOKIE:  (doc?.HUBSTAFF_INGRESS_COOKIE  || process.env.HUBSTAFF_INGRESS_COOKIE)  as string,
+      HUBSTAFF_CSRF_TOKEN:      (doc?.HUBSTAFF_CSRF_TOKEN      || process.env.HUBSTAFF_CSRF_TOKEN)      as string,
+    };
+    setCachedCredentials(creds as unknown as Record<string, string>);
+    return creds;
+  } finally {
+    await client.close();
+  }
+}
 
 interface MemberDoc {
   hubstaffId: number;
@@ -56,7 +91,7 @@ const REPORT_FILTERS: Record<string, string> = {
 async function loadMembersFromDB(
   mongoUri: string,
   mongoDb: string,
-): Promise<{ userIds: number[]; memberDirectory: MemberEntry[] }> {
+): Promise<MemberEntry[]> {
   const client = new MongoClient(mongoUri);
   try {
     await client.connect();
@@ -66,22 +101,39 @@ async function loadMembersFromDB(
       .find({}, { projection: { hubstaffId: 1, hubstaffName: 1, personalEmail: 1, micro1Email: 1, hdm: 1, team: 1, _id: 0 } })
       .toArray()) as unknown as MemberDoc[];
 
-    return {
-      userIds: docs.map(d => d.hubstaffId),
-      memberDirectory: docs.map(d => ({
-        name: d.hubstaffName,
-        personalEmail: d.personalEmail,
-        micro1Email: d.micro1Email,
-        hdm: d.hdm ?? null,
-        team: d.team ?? null,
-      })),
-    };
+    return docs.map(d => ({
+      name: d.hubstaffName,
+      personalEmail: d.personalEmail,
+      micro1Email: d.micro1Email,
+      hdm: d.hdm ?? null,
+      team: d.team ?? null,
+    }));
   } finally {
     await client.close();
   }
 }
 
-function buildReportUrl(orgId: string, projectId: string, dateStart: string, dateEnd: string, userIds: number[]): string {
+function buildRequestHeaders(orgId: string, creds: HubstaffCredentials): Record<string, string> {
+  return {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:150.0) Gecko/20100101 Firefox/150.0',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    Referer: 'https://app.hubstaff.com/',
+    Connection: 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    DNT: '1',
+    Cookie: [
+      `organization=${orgId}`,
+      `__stripe_mid=${creds.HUBSTAFF_STRIPE_MID}`,
+      `INGRESSCOOKIE=${creds.HUBSTAFF_INGRESS_COOKIE}`,
+      `XSRF-TOKEN=${creds.HUBSTAFF_XSRF_TOKEN}`,
+      `_hubstaff_session=${creds.HUBSTAFF_SESSION}`,
+      `hubstaff_account_refresh=${creds.HUBSTAFF_ACCOUNT_REFRESH}`,
+    ].join('; '),
+  };
+}
+
+function buildReportUrl(orgId: string, projectId: string, dateStart: string, dateEnd: string): string {
   const base = `https://app.hubstaff.com/reports/${orgId}/team/daily.csv`;
   const params = new URLSearchParams();
   params.append('date', dateStart);
@@ -95,10 +147,6 @@ function buildReportUrl(orgId: string, projectId: string, dateStart: string, dat
   params.append('filters[organization_id]', orgId);
   params.append('filters[projects][]', projectId);
 
-  for (const uid of userIds) {
-    params.append('filters[users][]', String(uid));
-  }
-
   return `${base}?${params.toString()}`;
 }
 
@@ -107,8 +155,13 @@ async function fetchUrl(url: string, headers: Record<string, string>): Promise<s
     headers,
     responseType: 'text',
     maxRedirects: 5,
-    validateStatus: (status) => status >= 200 && status < 300,
+    validateStatus: () => true,
   });
+  if (response.status < 200 || response.status >= 300) {
+    const preview = String(response.data ?? '').slice(0, 400);
+    console.error(`[fetchUrl] HTTP ${response.status} from Hubstaff:\n${preview}`);
+    throw new Error(`Hubstaff returned HTTP ${response.status} — check server logs for details`);
+  }
   return response.data;
 }
 
@@ -279,30 +332,16 @@ export async function runReport(dateStart?: string, dateEnd?: string): Promise<v
   const mongoDb = process.env.MONGO_DB!;
   const mongoCollection = process.env.MONGO_COLLECTION!;
 
-  const requestHeaders: Record<string, string> = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:150.0) Gecko/20100101 Firefox/150.0',
-    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9',
-    Referer: 'https://app.hubstaff.com/',
-    Connection: 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    DNT: '1',
-    Cookie: [
-      `organization=${orgId}`,
-      `__stripe_mid=${process.env.HUBSTAFF_STRIPE_MID}`,
-      `INGRESSCOOKIE=${process.env.HUBSTAFF_INGRESS_COOKIE}`,
-      `XSRF-TOKEN=${process.env.HUBSTAFF_XSRF_TOKEN}`,
-      `_hubstaff_session=${process.env.HUBSTAFF_SESSION}`,
-      `hubstaff_account_refresh=${process.env.HUBSTAFF_ACCOUNT_REFRESH}`,
-    ].join('; '),
-  };
+  console.log('Loading credentials from MongoDB…');
+  const creds = await loadCredentials(mongoUri, mongoDb);
+  const requestHeaders = buildRequestHeaders(orgId, creds);
 
   console.log('Loading members from MongoDB…');
-  const { userIds, memberDirectory } = await loadMembersFromDB(mongoUri, mongoDb);
-  console.log(`Loaded ${userIds.length} members from DB.`);
+  const memberDirectory = await loadMembersFromDB(mongoUri, mongoDb);
+  console.log(`Loaded ${memberDirectory.length} members from DB.`);
 
   console.log('Building report URL…');
-  const url = buildReportUrl(orgId, projectId, effectiveDateStart, effectiveDateEnd, userIds);
+  const url = buildReportUrl(orgId, projectId, effectiveDateStart, effectiveDateEnd);
 
   console.log('Fetching CSV from Hubstaff…');
   const csvText = await fetchUrl(url, requestHeaders);
