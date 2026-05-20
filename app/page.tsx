@@ -236,6 +236,25 @@ export default function Dashboard() {
     return filteredRows.filter(row => rangeCols.every(d => toSecs(row.dates?.[d] ?? '') === 0));
   })();
 
+  const exportZeroCSV = () => {
+    const sorted = [...zeroMembers].sort((a, b) => (a.hdm ?? '').localeCompare(b.hdm ?? ''));
+    const escape = (v: string | null) => {
+      const s = v ?? '';
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [
+      'Expert name,Personal Email,Micro1 Email,HDM',
+      ...sorted.map(r => [r.memberName, r.personalEmail, r.micro1Email, r.hdm].map(escape).join(',')),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `no-activity-experts-${TODAY}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Derived: over-threshold members
   const overMembers = (() => {
     const rangeCols = allDateCols.filter(d => (!zeroDatesFrom || d >= zeroDatesFrom) && (!zeroDatesTo || d <= zeroDatesTo));
@@ -559,6 +578,13 @@ export default function Dashboard() {
                 <label>To</label>
                 <input type="date" value={zeroDatesTo} max={TODAY} onChange={e => setZeroDatesTo(e.target.value)} />
               </div>
+              <button
+                className="btn-secondary"
+                onClick={e => { e.stopPropagation(); exportZeroCSV(); }}
+                style={{ fontSize: 12, padding: '4px 10px', marginRight: 4 }}
+              >
+                Export CSV
+              </button>
               <div className={`zero-chevron${zeroPanelOpen ? ' open' : ''}`}>▼</div>
             </div>
             <div className={`zero-list-wrap${zeroPanelOpen ? ' open' : ''}`} style={{ display: zeroPanelOpen ? 'block' : 'none', padding: '0 16px 14px' }}>
