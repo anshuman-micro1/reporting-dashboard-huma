@@ -19,6 +19,8 @@ export default function InvestigationsPage() {
   const [error, setError] = useState('');
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
 
   useEffect(() => {
     fetch('/api/investigations')
@@ -47,6 +49,22 @@ export default function InvestigationsPage() {
   };
 
   const openCount = rows.filter(r => r.status === 'open').length;
+
+  const filteredRows = rows
+    .filter(r => {
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return (
+        r.name.toLowerCase().includes(q) ||
+        (r.personalEmail ?? '').toLowerCase().includes(q) ||
+        (r.micro1Email ?? '').toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (a.status === b.status) return 0;
+      return a.status === 'open' ? -1 : 1;
+    });
 
   return (
     <>
@@ -77,6 +95,39 @@ export default function InvestigationsPage() {
           </span>
         </div>
 
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input
+            className="search-box"
+            type="text"
+            placeholder="Search by name or email…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+            {(['all', 'open', 'closed'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                style={{
+                  padding: '0 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: 'none',
+                  borderRadius: 0,
+                  cursor: 'pointer',
+                  background: statusFilter === s ? 'var(--accent)' : 'var(--surface)',
+                  color: statusFilter === s ? '#fff' : 'var(--text-secondary)',
+                  transition: 'background 0.15s',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 160px)' }}>
           <table>
             <thead>
@@ -99,12 +150,12 @@ export default function InvestigationsPage() {
                 <tr className="state-row">
                   <td colSpan={7} style={{ color: '#f87171' }}>Error: {error}</td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <tr className="state-row">
-                  <td colSpan={7}>No investigations yet</td>
+                  <td colSpan={7}>No investigations match</td>
                 </tr>
               ) : (
-                rows.map(inv => (
+                filteredRows.map(inv => (
                   <tr key={inv.id} className={inv.status === 'closed' ? 'inv-row-closed' : ''}>
                     <td style={{ fontWeight: 600 }}>{inv.name}</td>
                     <td className="dim">{inv.personalEmail || '—'}</td>
