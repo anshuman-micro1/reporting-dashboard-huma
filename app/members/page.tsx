@@ -1,7 +1,25 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+
+// ── types ──────────────────────────────────────────────────────────────────
+
+interface Expert {
+  id: string;
+  name: string;
+  personalEmail: string | null;
+  micro1Email: string | null;
+  hdm: string | null;
+  team: string | null;
+}
+
+interface EditFields {
+  personalEmail: string;
+  micro1Email: string;
+  hdm: string;
+  team: string;
+}
 
 interface ParsedRow {
   name: string;
@@ -15,6 +33,8 @@ interface UploadResult {
   updated: number;
   notFound: string[];
 }
+
+// ── csv helpers ────────────────────────────────────────────────────────────
 
 function tokeniseRow(line: string): string[] {
   const fields: string[] = [];
@@ -37,7 +57,6 @@ function tokeniseRow(line: string): string[] {
 }
 
 function normaliseHeader(h: string): string {
-  // Strip non-ASCII (emoji, special chars) then lowercase + collapse spaces
   return h.replace(/[^\x00-\x7F]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
@@ -50,14 +69,11 @@ function parseCsv(text: string): { rows: ParsedRow[]; error: string } {
   const idx = {
     name:          headers.findIndex(h => h === 'member name'),
     personalEmail: headers.findIndex(h => h === 'personal email'),
-    // Accept both "micro1 email" (actual CSV) and "expert email"
     expertEmail:   headers.findIndex(h => h === 'micro1 email' || h === 'expert email'),
-    // HDM column may have an emoji suffix — match by prefix
     hdm:           headers.findIndex(h => h === 'hdm' || h.startsWith('hdm')),
     team:          headers.findIndex(h => h === 'team'),
   };
 
-  // team is optional — don't fail if missing
   const requiredIdx = { name: idx.name, personalEmail: idx.personalEmail, expertEmail: idx.expertEmail, hdm: idx.hdm };
   const missing = Object.entries(requiredIdx).filter(([, v]) => v === -1).map(([k]) => k);
   if (missing.length > 0) {
@@ -78,7 +94,19 @@ function parseCsv(text: string): { rows: ParsedRow[]; error: string } {
   return { rows, error: '' };
 }
 
+// ── field meta ─────────────────────────────────────────────────────────────
+
+const EDIT_FIELDS: { key: keyof EditFields; label: string; placeholder: string }[] = [
+  { key: 'personalEmail', label: 'Personal Email',  placeholder: 'e.g. john@gmail.com' },
+  { key: 'micro1Email',   label: 'Micro1 Email',    placeholder: 'e.g. john@micro1.com' },
+  { key: 'hdm',           label: 'HDM',             placeholder: 'e.g. Jane Smith' },
+  { key: 'team',          label: 'Team',            placeholder: 'e.g. Engineering' },
+];
+
+// ── component ──────────────────────────────────────────────────────────────
+
 export default function MembersUploadPage() {
+  // csv upload
   const [rows, setRows]             = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState('');
   const [fileName, setFileName]     = useState('');
@@ -90,6 +118,110 @@ export default function MembersUploadPage() {
   const [syncError, setSyncError]   = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // search
+  const [searchQuery, setSearchQuery]     = useState('');
+  const [searchResults, setSearchResults] = useState<Expert[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showDropdown, setShowDropdown]   = useState(false);
+  const [hoveredId, setHoveredId]         = useState<string | null>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // edit modal
+  const [editExpert, setEditExpert]   = useState<Expert | null>(null);
+  const [editFields, setEditFields]   = useState<EditFields>({ personalEmail: '', micro1Email: '', hdm: '', team: '' });
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [saveError, setSaveError]     = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // search debounce
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      setShowDropdown(true);
+      try {
+        const res = await fetch(`/api/members?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        setSearchResults(Array.isArray(data) ? data : []);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // click outside closes dropdown
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const openEdit = (expert: Expert) => {
+    setEditExpert(expert);
+    setEditFields({
+      personalEmail: expert.personalEmail ?? '',
+      micro1Email:   expert.micro1Email   ?? '',
+      hdm:           expert.hdm           ?? '',
+      team:          expert.team          ?? '',
+    });
+    setShowDropdown(false);
+    setSearchQuery('');
+    setSaveError('');
+    setSaveSuccess(false);
+    setShowConfirm(false);
+  };
+
+  const closeModal = () => {
+    if (saving) return;
+    setEditExpert(null);
+    setShowConfirm(false);
+    setSaveError('');
+    setSaveSuccess(false);
+  };
+
+  const handleSave = async () => {
+    if (!editExpert) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const res = await fetch('/api/members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id:            editExpert.id,
+          personalEmail: editFields.personalEmail.trim() || null,
+          micro1Email:   editFields.micro1Email.trim()   || null,
+          hdm:           editFields.hdm.trim()           || null,
+          team:          editFields.team.trim()          || null,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Unknown error');
+      setSaveSuccess(true);
+      setShowConfirm(false);
+      setTimeout(() => closeModal(), 1400);
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : 'Unknown error');
+      setShowConfirm(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // csv upload handlers
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -152,6 +284,8 @@ export default function MembersUploadPage() {
     }
   };
 
+  const dropdownVisible = showDropdown && searchQuery.trim().length >= 2;
+
   return (
     <>
       <header>
@@ -174,6 +308,77 @@ export default function MembersUploadPage() {
       </header>
 
       <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 24px' }}>
+
+        {/* ── Search Expert ── */}
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: 18, marginBottom: 24,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+            Search Expert
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 12 }}>
+            Find an expert by name, personal email, or micro1 email to view and edit their details.
+          </div>
+
+          <div ref={searchRef} style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search by name, personal email or micro1 email…"
+              style={{ paddingLeft: 12 }}
+            />
+
+            {dropdownVisible && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                borderRadius: 8, zIndex: 200,
+                boxShadow: '0 8px 24px rgba(0,0,0,.45)',
+                maxHeight: 300, overflowY: 'auto',
+              }}>
+                {searchLoading && (
+                  <div style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="spinner" style={{ width: 13, height: 13, margin: 0 }} />
+                    Searching…
+                  </div>
+                )}
+                {!searchLoading && searchResults.length === 0 && (
+                  <div style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 13 }}>
+                    No experts found
+                  </div>
+                )}
+                {!searchLoading && searchResults.map(expert => (
+                  <div
+                    key={expert.id}
+                    onMouseEnter={() => setHoveredId(expert.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    onClick={() => openEdit(expert)}
+                    style={{
+                      padding: '10px 14px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid var(--border-soft)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+                      background: hoveredId === expert.id ? 'var(--row-hover)' : 'transparent',
+                      transition: 'background 0.12s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{expert.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {[expert.personalEmail, expert.micro1Email].filter(Boolean).join(' · ') || 'No emails set'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Edit →</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── CSV Upload ── */}
         <div className="inv-page-header">
           <h2 className="inv-page-title">Upload Expert CSV</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -205,7 +410,6 @@ export default function MembersUploadPage() {
           </div>
         </div>
 
-        {/* Sync result */}
         {syncResult && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10,
@@ -217,7 +421,7 @@ export default function MembersUploadPage() {
               <polyline points="20 6 9 17 4 12"/>
             </svg>
             {syncResult.inserted} new expert{syncResult.inserted !== 1 ? 's' : ''} added to DB
-            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+            <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>
               ({syncResult.total} fetched from Hubstaff)
             </span>
             <button className="btn-secondary" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => setSyncResult(null)}>✕</button>
@@ -227,7 +431,7 @@ export default function MembersUploadPage() {
           <div className="modal-error show" style={{ marginBottom: 16 }}>{syncError}</div>
         )}
 
-        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
+        <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
           Upload a CSV with columns: <strong style={{ color: 'var(--text)' }}>Member Name</strong>,{' '}
           <strong style={{ color: 'var(--text)' }}>Personal Email</strong>,{' '}
           <strong style={{ color: 'var(--text)' }}>Micro1 Email</strong>,{' '}
@@ -236,7 +440,6 @@ export default function MembersUploadPage() {
           Experts are matched by name (case-insensitive). Unmatched names are listed at the end.
         </p>
 
-        {/* File picker */}
         {!result && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
             <label
@@ -255,7 +458,7 @@ export default function MembersUploadPage() {
               Choose CSV
               <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} style={{ display: 'none' }} />
             </label>
-            {fileName && <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{fileName}</span>}
+            {fileName && <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{fileName}</span>}
             {rows.length > 0 && (
               <>
                 <div style={{ flex: 1 }} />
@@ -276,14 +479,9 @@ export default function MembersUploadPage() {
           </div>
         )}
 
-        {parseError && (
-          <div className="modal-error show" style={{ marginBottom: 16 }}>{parseError}</div>
-        )}
-        {apiError && (
-          <div className="modal-error show" style={{ marginBottom: 16 }}>{apiError}</div>
-        )}
+        {parseError && <div className="modal-error show" style={{ marginBottom: 16 }}>{parseError}</div>}
+        {apiError   && <div className="modal-error show" style={{ marginBottom: 16 }}>{apiError}</div>}
 
-        {/* Result banner */}
         {result && (
           <div style={{ marginBottom: 24 }}>
             <div style={{
@@ -324,7 +522,6 @@ export default function MembersUploadPage() {
           </div>
         )}
 
-        {/* Preview table */}
         {rows.length > 0 && !result && (
           <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 280px)' }}>
             <table>
@@ -352,6 +549,107 @@ export default function MembersUploadPage() {
           </div>
         )}
       </main>
+
+      {/* ── Edit Modal ── */}
+      {editExpert && (
+        <div
+          className="modal-overlay open"
+          onClick={e => { if (e.target === e.currentTarget && !showConfirm) closeModal(); }}
+        >
+          <div className="modal" style={{ width: 500, maxWidth: '95vw', gap: 16 }}>
+            <div className="modal-title-row">
+              <div className="modal-title">Edit Expert</div>
+              <button className="modal-x-btn" onClick={closeModal} disabled={saving}>✕</button>
+            </div>
+
+            {/* Read-only name */}
+            <div className="inv-member-info">
+              <div className="inv-info-row">
+                <span className="inv-info-label">Name</span>
+                <span className="inv-info-value" style={{ fontWeight: 700 }}>{editExpert.name}</span>
+              </div>
+            </div>
+
+            {saveSuccess && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#4ade80', fontWeight: 600 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Expert updated successfully
+              </div>
+            )}
+
+            {saveError && <div className="modal-error show">{saveError}</div>}
+
+            {!saveSuccess && (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {EDIT_FIELDS.map(({ key, label, placeholder }) => (
+                    <div className="modal-field" key={key}>
+                      <label>{label}</label>
+                      <input
+                        type="text"
+                        value={editFields[key]}
+                        onChange={e => setEditFields(prev => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={placeholder}
+                        style={{ paddingLeft: 12 }}
+                        disabled={saving}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="modal-actions">
+                  <button className="btn-secondary" onClick={closeModal} disabled={saving}>
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setShowConfirm(true)}
+                    disabled={saving}
+                    style={{
+                      padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      background: 'var(--accent)', color: '#fff', border: 'none',
+                      cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirmation Modal ── */}
+      {showConfirm && editExpert && (
+        <div className="modal-overlay open" style={{ zIndex: 600 }}>
+          <div className="modal" style={{ width: 380, maxWidth: '95vw', gap: 16 }}>
+            <div className="modal-title">Confirm Update</div>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+              Save changes to{' '}
+              <strong style={{ color: 'var(--text)' }}>{editExpert.name}</strong>?
+              This will overwrite their current details in the database.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowConfirm(false)} disabled={saving}>
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={{
+                  padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  background: 'var(--accent)', color: '#fff', border: 'none',
+                  cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
+                }}
+              >
+                {saving ? <><span className="spinner" style={{ width: 13, height: 13 }} />Saving…</> : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
