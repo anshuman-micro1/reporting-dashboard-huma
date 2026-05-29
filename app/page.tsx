@@ -427,6 +427,9 @@ export default function Dashboard() {
           <Link href="/investigations" className="btn-secondary inv-nav-btn">
             Investigations
           </Link>
+          <Link href="/leaderboard" className="btn-secondary inv-nav-btn">
+            Leaderboard
+          </Link>
           <button id="fetch-btn" onClick={() => { setFetchError(''); setModalOpen(true); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>

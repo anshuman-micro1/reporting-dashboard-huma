@@ -31,6 +31,18 @@ async function buildHeaders() {
     }
   }
   const get = (key: string) => (creds![key] || process.env[key] || '') as string;
+
+  const cookieParts = [
+    `organization=${orgId}`,
+    `__stripe_mid=${get('HUBSTAFF_STRIPE_MID')}`,
+    `INGRESSCOOKIE=${get('HUBSTAFF_INGRESS_COOKIE')}`,
+    `XSRF-TOKEN=${get('HUBSTAFF_XSRF_TOKEN')}`,
+    `_hubstaff_session=${get('HUBSTAFF_SESSION')}`,
+    `hubstaff_account_refresh=${get('HUBSTAFF_ACCOUNT_REFRESH')}`,
+  ];
+  const cfuvid = get('HUBSTAFF_CFUVID');
+  if (cfuvid) cookieParts.push(`__cf_uvid=${cfuvid}`);
+
   return {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:150.0) Gecko/20100101 Firefox/150.0',
     Accept: 'application/json',
@@ -42,14 +54,7 @@ async function buildHeaders() {
     Origin: 'https://app.hubstaff.com',
     Connection: 'keep-alive',
     DNT: '1',
-    Cookie: [
-      `organization=${orgId}`,
-      `__stripe_mid=${get('HUBSTAFF_STRIPE_MID')}`,
-      `INGRESSCOOKIE=${get('HUBSTAFF_INGRESS_COOKIE')}`,
-      `XSRF-TOKEN=${get('HUBSTAFF_XSRF_TOKEN')}`,
-      `_hubstaff_session=${get('HUBSTAFF_SESSION')}`,
-      `hubstaff_account_refresh=${get('HUBSTAFF_ACCOUNT_REFRESH')}`,
-    ].join('; '),
+    Cookie: cookieParts.join('; '),
   };
 }
 
@@ -67,7 +72,12 @@ async function fetchAllMembers(): Promise<HubstaffMember[]> {
     );
 
     if (res.status < 200 || res.status >= 300) {
-      throw new Error(`Hubstaff API returned HTTP ${res.status}`);
+      const raw = res.data as unknown;
+      const body = typeof raw === 'string'
+        ? raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+        : JSON.stringify(raw).slice(0, 300);
+      console.error(`[sync] Hubstaff HTTP ${res.status}:`, body);
+      throw new Error(`Hubstaff API returned HTTP ${res.status}${body ? ` — ${body}` : ''}`);
     }
 
     const { items, pagination } = res.data;
