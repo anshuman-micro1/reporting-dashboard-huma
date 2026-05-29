@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import DateRangePicker from '@/components/DateRangePicker';
 
 interface LeaderboardRow {
   rank: number;
@@ -16,15 +17,10 @@ function defaultDateRange(): { from: string; to: string } {
   yesterday.setDate(yesterday.getDate() - 1);
   const weekAgo = new Date(yesterday);
   weekAgo.setDate(weekAgo.getDate() - 6);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  return { from: fmt(weekAgo), to: fmt(yesterday) };
+  const fmtLocal = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { from: fmtLocal(weekAgo), to: fmtLocal(yesterday) };
 }
-
-const YESTERDAY = (() => {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-})();
 
 const DEFAULT_RANGE = defaultDateRange();
 
@@ -96,26 +92,11 @@ export default function LeaderboardPage() {
           </div>
         </div>
 
-        <div className="toolbar">
-          <div className="date-range">
-            <label>From</label>
-            <input
-              type="date"
-              value={dateFrom}
-              max={YESTERDAY}
-              onChange={e => setDateFrom(e.target.value)}
-            />
-            <span className="sep">→</span>
-            <label>To</label>
-            <input
-              type="date"
-              value={dateTo}
-              min={dateFrom}
-              max={YESTERDAY}
-              onChange={e => setDateTo(e.target.value)}
-            />
-          </div>
-        </div>
+        <DateRangePicker
+          from={dateFrom}
+          to={dateTo}
+          onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+        />
 
         <div className="table-wrap">
           <table>
