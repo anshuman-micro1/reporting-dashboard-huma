@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
           timezone:      { $ifNull: ['$_report.timezone',     ''] },
           activity:      { $ifNull: ['$_report.activity',     ''] },
           dates:         { $ifNull: ['$_report.dates',        {}] },
+          allTasks:      { $ifNull: ['$_report.allTasks',     []] },
         },
       },
       { $sort: { memberName: 1 } },

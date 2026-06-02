@@ -3,6 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 
+interface QCTask {
+  link: string;
+  recordingLength: string;
+  app: string;
+}
+
 interface ReportRow {
   memberName: string;
   personalEmail: string | null;
@@ -13,6 +19,7 @@ interface ReportRow {
   hdm: string | null;
   team: string | null;
   dates: Record<string, string>;
+  allTasks: Array<{ date: string; tasks: QCTask[] }>;
 }
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -41,6 +48,24 @@ function pillClass(pct: string): string {
   if (n >= 70) return 'high';
   if (n >= 40) return 'medium';
   return 'low';
+}
+
+function tasksInRange(row: ReportRow, from: string, to: string): number {
+  if (!row.allTasks?.length) return 0;
+  return row.allTasks
+    .filter(e => (!from || e.date >= from) && (!to || e.date <= to))
+    .reduce((sum, e) => sum + (e.tasks?.length ?? 0), 0);
+}
+
+function appsInRange(row: ReportRow, from: string, to: string): string[] {
+  if (!row.allTasks?.length) return [];
+  const apps = new Set<string>();
+  for (const e of row.allTasks) {
+    if ((!from || e.date >= from) && (!to || e.date <= to)) {
+      for (const t of e.tasks ?? []) { if (t.app) apps.add(t.app); }
+    }
+  }
+  return Array.from(apps).sort();
 }
 
 function formatSnapshotDate(dateStr: string): string {
@@ -77,6 +102,7 @@ export default function Dashboard() {
   const [overPanelOpen, setOverPanelOpen] = useState(false);
   const [invPanelOpen, setInvPanelOpen] = useState(false);
   const [offbPanelOpen, setOffbPanelOpen] = useState(false);
+  const [multiAppPanelOpen, setMultiAppPanelOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [fetchDateFrom, setFetchDateFrom] = useState('');
   const [fetchDateTo, setFetchDateTo] = useState('');
@@ -96,10 +122,12 @@ export default function Dashboard() {
   const [snapshotModalOpen, setSnapshotModalOpen] = useState(false);
   const [copiedSnapshot, setCopiedSnapshot] = useState(false);
   const [dailyReportLoading, setDailyReportLoading] = useState(false);
-  const [sortCol, setSortCol] = useState<'name' | 'activity' | null>(null);
+  const [sortCol, setSortCol] = useState<'name' | 'activity' | 'tasks' | 'total' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [huma2Filter, setHuma2Filter] = useState(false);
   const [selectedHDM, setSelectedHDM] = useState('');
+  const [minTasks, setMinTasks] = useState(0);
+  const [maxTasks, setMaxTasks] = useState(0);
   const [investigateModal, setInvestigateModal] = useState<{
     open: boolean; row: ReportRow | null; notes: string; saving: boolean; error: string;
   }>({ open: false, row: null, notes: '', saving: false, error: '' });
@@ -227,6 +255,13 @@ export default function Dashboard() {
   const filteredRows = allRows.filter(row => {
     if (huma2Filter && row.team !== 'huma2') return false;
     if (selectedHDM && row.hdm !== selectedHDM) return false;
+    if (minTasks > 0 || maxTasks > 0) {
+      const from = dateFrom || allDateCols[0] || '';
+      const to   = dateTo   || allDateCols[allDateCols.length - 1] || '';
+      const n = tasksInRange(row, from, to);
+      if (minTasks > 0 && n < minTasks) return false;
+      if (maxTasks > 0 && n > maxTasks) return false;
+    }
     return true;
   });
 
@@ -279,6 +314,15 @@ export default function Dashboard() {
 
   // Derived: members with pending offboarding requests (shown in panel)
   const offboardingMembers = filteredRows.filter(row => offboardingStatusMap.get(row.memberName) === 'pending');
+
+  // Derived: experts using more than one app in the selected date range
+  const multiAppMembers = (() => {
+    const from = dateFrom || allDateCols[0] || '';
+    const to   = dateTo   || allDateCols[allDateCols.length - 1] || '';
+    return filteredRows
+      .map(row => ({ row, apps: appsInRange(row, from, to) }))
+      .filter(({ apps }) => apps.length > 1);
+  })();
 
   const handleFetch = async () => {
     setFetchLoading(true);
@@ -372,7 +416,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleSort = (col: 'name' | 'activity') => {
+  const handleSort = (col: 'name' | 'activity' | 'tasks' | 'total') => {
     if (sortCol === col) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
@@ -386,6 +430,12 @@ export default function Dashboard() {
     let cmp = 0;
     if (sortCol === 'name') {
       cmp = (a.memberName || '').localeCompare(b.memberName || '');
+    } else if (sortCol === 'tasks') {
+      const from = dateFrom || allDateCols[0] || '';
+      const to   = dateTo   || allDateCols[allDateCols.length - 1] || '';
+      cmp = tasksInRange(a, from, to) - tasksInRange(b, from, to);
+    } else if (sortCol === 'total') {
+      cmp = toSecs(computeTotal(a, visDateCols)) - toSecs(computeTotal(b, visDateCols));
     } else {
       cmp = (parseInt(a.activity) || 0) - (parseInt(b.activity) || 0);
     }
@@ -557,10 +607,29 @@ export default function Dashboard() {
             </select>
           </div>
 
+          <div className="date-range">
+            <label>Tasks</label>
+            <input
+              type="number"
+              min={0}
+              value={minTasks || ''}
+              placeholder="Min"
+              onChange={e => setMinTasks(Math.max(0, parseInt(e.target.value) || 0))}
+            />
+            <span className="sep">–</span>
+            <input
+              type="number"
+              min={0}
+              value={maxTasks || ''}
+              placeholder="Max"
+              onChange={e => setMaxTasks(Math.max(0, parseInt(e.target.value) || 0))}
+            />
+          </div>
+
           <div className="toolbar-spacer" />
           <span className="result-count">
             {!loading && (
-              (huma2Filter || selectedHDM)
+              (huma2Filter || selectedHDM || minTasks > 0 || maxTasks > 0)
                 ? `${filteredRows.length} of ${allRows.length} expert${allRows.length !== 1 ? 's' : ''}`
                 : `${allRows.length} expert${allRows.length !== 1 ? 's' : ''}`
             )}
@@ -699,6 +768,29 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Multi-app panel */}
+        {!loading && multiAppMembers.length > 0 && (
+          <div id="multiapp-panel">
+            <div className="multiapp-header" onClick={() => setMultiAppPanelOpen(p => !p)}>
+              <div className="multiapp-icon">⬡</div>
+              <div className="multiapp-title">
+                {multiAppMembers.length} expert{multiAppMembers.length > 1 ? 's' : ''} using multiple apps
+              </div>
+              <div className={`multiapp-chevron${multiAppPanelOpen ? ' open' : ''}`}>▼</div>
+            </div>
+            <div style={{ display: multiAppPanelOpen ? 'block' : 'none', padding: '0 16px 14px' }}>
+              <div className="multiapp-grid">
+                {multiAppMembers.map(({ row, apps }) => (
+                  <div key={row.memberName} className="multiapp-member" onClick={() => scrollToMember(row.memberName)}>
+                    <div className="mam-name">{row.memberName || '—'}</div>
+                    <div className="mam-apps">{apps.join(' · ')}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="table-wrap" ref={tableWrapRef}>
           <table>
@@ -711,12 +803,17 @@ export default function Dashboard() {
                 <th className="col-pemail">Personal Email</th>
                 <th className="col-memail">Micro1 Email</th>
                 <th className="col-hdm">HDM</th>
+                <th className="col-tasks th-sortable" onClick={() => handleSort('tasks')}>
+                  Tasks
+                  <span className="sort-icon">{sortCol === 'tasks' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+                </th>
                 <th className="col-activity th-sortable" onClick={() => handleSort('activity')}>
                   Activity
                   <span className="sort-icon">{sortCol === 'activity' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
                 </th>
-                <th className={`col-total th-total${rangeActive ? ' filtered' : ''}`}>
+                <th className={`col-total th-total th-sortable${rangeActive ? ' filtered' : ''}`} onClick={() => handleSort('total')}>
                   {rangeActive ? 'Range Total' : 'Total'}
+                  <span className="sort-icon">{sortCol === 'total' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
                 </th>
                 <th className="col-actions"></th>
                 {[...visDateCols].reverse().map(d => {
@@ -733,19 +830,19 @@ export default function Dashboard() {
             <tbody ref={tableBodyRef}>
               {loading ? (
                 <tr className="state-row">
-                  <td colSpan={7 + visDateCols.length}>
+                  <td colSpan={8 + visDateCols.length}>
                     <span className="spinner" />Loading…
                   </td>
                 </tr>
               ) : loadError ? (
                 <tr className="state-row">
-                  <td colSpan={7 + visDateCols.length} style={{ color: '#f87171' }}>
+                  <td colSpan={8 + visDateCols.length} style={{ color: '#f87171' }}>
                     Error: {loadError}
                   </td>
                 </tr>
               ) : allRows.length === 0 ? (
                 <tr className="state-row">
-                  <td colSpan={7 + visDateCols.length}>No records found</td>
+                  <td colSpan={8 + visDateCols.length}>No records found</td>
                 </tr>
               ) : (
                 sortedRows.map(row => {
@@ -762,6 +859,14 @@ export default function Dashboard() {
                       <td className="col-pemail dim">{row.personalEmail || '—'}</td>
                       <td className="col-memail dim">{row.micro1Email || '—'}</td>
                       <td className="col-hdm dim">{row.hdm || '—'}</td>
+                      <td className="col-tasks">
+                        {(() => {
+                          const from = dateFrom || allDateCols[0] || '';
+                          const to   = dateTo   || allDateCols[allDateCols.length - 1] || '';
+                          const n = tasksInRange(row, from, to);
+                          return n > 0 ? <span style={{ fontWeight: 600 }}>{n}</span> : <span className="dim">—</span>;
+                        })()}
+                      </td>
                       <td className="col-activity">
                         {pct ? (
                           <span className={`pill ${pillClass(pct)}`}>{pct}</span>

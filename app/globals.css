@@ -120,19 +120,23 @@ main { padding: 20px 24px; }
 .input-wrap { position: relative; flex: 1; min-width: 220px; max-width: 380px; }
 .input-wrap svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 
-input[type="text"], input[type="date"] {
+input[type="text"], input[type="date"], input[type="number"] {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); font-size: 13px;
   outline: none; transition: border-color .15s;
 }
 input[type="text"] { width: 100%; padding: 8px 12px 8px 34px; }
 input[type="date"] { padding: 8px 10px; color-scheme: dark; }
-input[type="text"]:focus, input[type="date"]:focus { border-color: var(--accent); }
+input[type="number"] { padding: 8px 10px; width: 60px; text-align: center; }
+input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus { border-color: var(--accent); }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
 
 .date-range {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 6px 12px;
+  border-radius: var(--radius); padding: 0 12px; height: 38px;
 }
 .date-range label { font-size: 11px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
 .date-range .sep { color: var(--text-faint); font-size: 16px; }
@@ -756,6 +760,51 @@ tr.row-offboarded td.col-name { border-left: 3px solid #334155; }
   font-size: 12px; color: #f87171; line-height: 1.5;
 }
 .modal-error.show { display: block; }
+
+/* ── MULTI-APP PANEL ─────────────────────────────────── */
+#multiapp-panel {
+  background: #0e1820;
+  border: 1px solid #1e3a50;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.multiapp-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; cursor: pointer; user-select: none;
+}
+.multiapp-header:hover { background: #111c28; }
+
+.multiapp-icon {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #164e63;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 11px;
+}
+
+.multiapp-title { font-size: 13px; font-weight: 600; color: #38bdf8; flex: 1; }
+
+.multiapp-chevron { font-size: 11px; color: #4a7090; transition: transform .2s; }
+.multiapp-chevron.open { transform: rotate(180deg); }
+
+.multiapp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px; padding-top: 2px;
+}
+
+.multiapp-member {
+  background: #0c1a24; border: 1px solid #1e3a50; border-radius: 6px;
+  padding: 7px 10px; display: flex; flex-direction: column; gap: 3px;
+  cursor: pointer; transition: background .12s, border-color .12s;
+}
+.multiapp-member:hover { background: #122030; border-color: #2563a0; }
+.multiapp-member .mam-name { font-size: 12px; font-weight: 600; color: #7dd3fc; }
+.multiapp-member .mam-apps { font-size: 11px; color: #4a7090; }
+
+/* ── col-tasks ───────────────────────────────────────── */
+.col-tasks { min-width: 64px; max-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* ── DATE RANGE PICKER ─────────────────────────────────── */
 .drp-root { margin-bottom: 14px; }

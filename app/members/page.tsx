@@ -34,6 +34,20 @@ interface UploadResult {
   notFound: string[];
 }
 
+interface QCParsedRow {
+  date: string;
+  expertEmail: string;
+  expertName: string;
+  link: string;
+  recordingLength: string;
+  app: string;
+}
+
+interface QCUploadResult {
+  updated: number;
+  notFound: string[];
+}
+
 // ── csv helpers ────────────────────────────────────────────────────────────
 
 function tokeniseRow(line: string): string[] {
@@ -94,6 +108,58 @@ function parseCsv(text: string): { rows: ParsedRow[]; error: string } {
   return { rows, error: '' };
 }
 
+function parseQcDate(raw: string): string {
+  const clean = raw.trim().split(' ')[0];
+  const parts = clean.split('/');
+  if (parts.length !== 3) return '';
+  let [m, d, y] = parts;
+  if (y.length === 2) y = '20' + y;
+  if (!/^\d+$/.test(m) || !/^\d+$/.test(d) || !/^\d+$/.test(y)) return '';
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
+function parseQcCsv(text: string): { rows: QCParsedRow[]; error: string } {
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+  if (lines.length < 2) return { rows: [], error: 'CSV must have a header row and at least one data row.' };
+
+  const headers = tokeniseRow(lines[0]).map(normaliseHeader);
+
+  const idx = {
+    date:            headers.findIndex(h => h === 'date'),
+    expertName:      headers.findIndex(h => h === 'expert name'),
+    expertEmail:     headers.findIndex(h => h === 'expert email'),
+    link:            headers.findIndex(h => h === 'feather link'),
+    recordingLength: headers.findIndex(h => h === 'recording length'),
+    app:             headers.findIndex(h => h === 'app'),
+  };
+
+  if (idx.date === -1 || idx.expertEmail === -1 || idx.link === -1) {
+    return { rows: [], error: 'Missing required columns: Date, Expert Email, Feather Link' };
+  }
+
+  const rows: QCParsedRow[] = [];
+  for (const line of lines.slice(1)) {
+    const cols = tokeniseRow(line);
+    const rawDate        = (cols[idx.date]            ?? '').trim();
+    const expertEmail    = (cols[idx.expertEmail]      ?? '').trim().toLowerCase();
+    const expertName     = idx.expertName      !== -1 ? (cols[idx.expertName]      ?? '').trim() : '';
+    const link           = (cols[idx.link]             ?? '').trim();
+    const recordingLength = idx.recordingLength !== -1 ? (cols[idx.recordingLength] ?? '').trim() : '';
+    const app            = idx.app             !== -1 ? (cols[idx.app]             ?? '').trim() : '';
+
+    if (!rawDate || !expertEmail || !link) continue;
+    if (expertEmail === '#n/a' || expertEmail === 'not found') continue;
+    if (!link.startsWith('http')) continue;
+
+    const date = parseQcDate(rawDate);
+    if (!date) continue;
+
+    rows.push({ date, expertEmail, expertName, link, recordingLength, app });
+  }
+
+  return { rows, error: '' };
+}
+
 // ── field meta ─────────────────────────────────────────────────────────────
 
 const EDIT_FIELDS: { key: keyof EditFields; label: string; placeholder: string }[] = [
@@ -133,6 +199,15 @@ export default function MembersUploadPage() {
   const [saving, setSaving]           = useState(false);
   const [saveError, setSaveError]     = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // qc tracking upload
+  const [qcRows, setQcRows]           = useState<QCParsedRow[]>([]);
+  const [qcFileName, setQcFileName]   = useState('');
+  const [qcParseError, setQcParseError] = useState('');
+  const [qcUploading, setQcUploading] = useState(false);
+  const [qcResult, setQcResult]       = useState<QCUploadResult | null>(null);
+  const [qcApiError, setQcApiError]   = useState('');
+  const qcFileRef = useRef<HTMLInputElement>(null);
 
   // search debounce
   useEffect(() => {
@@ -281,6 +356,46 @@ export default function MembersUploadPage() {
       setSyncError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleQcFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setQcFileName(file.name);
+    setQcResult(null);
+    setQcApiError('');
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      const { rows: parsed, error } = parseQcCsv(text);
+      setQcParseError(error);
+      setQcRows(parsed);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleQcUpload = async () => {
+    if (!qcRows.length) return;
+    setQcUploading(true);
+    setQcApiError('');
+    setQcResult(null);
+    try {
+      const res = await fetch('/api/qc-tracking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: qcRows }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Unknown error');
+      setQcResult(data);
+      setQcRows([]);
+      setQcFileName('');
+      if (qcFileRef.current) qcFileRef.current.value = '';
+    } catch (err: unknown) {
+      setQcApiError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setQcUploading(false);
     }
   };
 
@@ -548,6 +663,103 @@ export default function MembersUploadPage() {
             </table>
           </div>
         )}
+        {/* ── QC Tracking Upload ── */}
+        <div style={{ marginTop: 40 }}>
+          <div className="inv-page-header">
+            <h2 className="inv-page-title">Upload QC Tracking CSV</h2>
+            {qcRows.length > 0 && !qcResult && (
+              <span className="result-count">{qcRows.length} task row{qcRows.length !== 1 ? 's' : ''} parsed</span>
+            )}
+          </div>
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
+            Upload the daily QC Tracking sheet to sync task data into expert reports.
+            Required columns: <strong style={{ color: 'var(--text)' }}>Date</strong>,{' '}
+            <strong style={{ color: 'var(--text)' }}>Expert Email</strong>,{' '}
+            <strong style={{ color: 'var(--text)' }}>Feather Link</strong>,{' '}
+            <strong style={{ color: 'var(--text)' }}>Recording Length</strong>,{' '}
+            <strong style={{ color: 'var(--text)' }}>App</strong>.
+          </p>
+
+          {!qcResult && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <label style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                color: 'var(--text)', fontSize: 13, fontWeight: 600,
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Choose QC CSV
+                <input ref={qcFileRef} type="file" accept=".csv,text/csv" onChange={handleQcFile} style={{ display: 'none' }} />
+              </label>
+              {qcFileName && <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{qcFileName}</span>}
+              {qcRows.length > 0 && (
+                <>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    onClick={handleQcUpload}
+                    disabled={qcUploading}
+                    style={{
+                      padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      background: 'var(--accent)', color: '#fff', border: 'none',
+                      cursor: qcUploading ? 'not-allowed' : 'pointer', opacity: qcUploading ? 0.6 : 1,
+                    }}
+                  >
+                    {qcUploading
+                      ? <><span className="spinner" style={{ width: 13, height: 13 }} />Updating…</>
+                      : `Update ${qcRows.length} task row${qcRows.length !== 1 ? 's' : ''}`}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {qcParseError && <div className="modal-error show" style={{ marginBottom: 16 }}>{qcParseError}</div>}
+          {qcApiError   && <div className="modal-error show" style={{ marginBottom: 16 }}>{qcApiError}</div>}
+
+          {qcResult && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '14px 18px', borderRadius: 10,
+                background: '#0d2318', border: '1px solid #166534',
+                color: '#4ade80', fontSize: 14, fontWeight: 600, marginBottom: 12,
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                {qcResult.updated} expert report{qcResult.updated !== 1 ? 's' : ''} updated with task data
+                <div style={{ flex: 1 }} />
+                <button className="btn-secondary" onClick={() => setQcResult(null)} style={{ fontSize: 12 }}>
+                  Upload another
+                </button>
+              </div>
+
+              {qcResult.notFound.length > 0 && (
+                <div style={{ padding: '14px 18px', borderRadius: 10, background: '#1a0f0f', border: '1px solid #7f1d1d' }}>
+                  <div style={{ color: '#f87171', fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+                    {qcResult.notFound.length} expert{qcResult.notFound.length !== 1 ? 's' : ''} not found in reports
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {qcResult.notFound.map(name => (
+                      <span key={name} style={{
+                        padding: '3px 10px', borderRadius: 6,
+                        background: '#2d1515', border: '1px solid #7f1d1d',
+                        color: '#fca5a5', fontSize: 12,
+                      }}>
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </main>
 
       {/* ── Edit Modal ── */}
