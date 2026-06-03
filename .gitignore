@@ -1,0 +1,77 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+build/
+
+# Environment files
+.env
+.env.*.local
+.env.local
+
+# Logs
+logs/
+*.log
+pids/
+*.pid
+
+# TypeScript
+*.tsbuildinfo
+dist/
+
+# Test coverage
+coverage/
+nyc_output/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# CI / Deployment
+.vercel/
+.vercel/output/
+.vercel_cache/
+.now/
+.now.sh
+.netlify/
+.deploy/
+
+# Build tool caches
+.parcel-cache/
+.turbo/
+.cache-storybook/
+
+# Local env
+.local.env
+.local/
+
+# Editor history
+.history/
+
+# Misc
+.cache/
+*.tgz
+*.bak
+*.swp
+
+# Secrets and keys
+.certs/
+*.key
+*.pem
+
+# Optional package manager stores
+.pnpm-store/
