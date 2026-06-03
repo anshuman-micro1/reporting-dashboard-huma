@@ -3,7 +3,7 @@ import mongoose, { Schema, Model, Document } from 'mongoose';
 export interface IUser extends Document {
   email:        string;
   name:         string;
-  role:         'admin' | 'user';
+  role:         'admin' | 'user' | 'hdm' | 'hdl';
   passwordHash: string | null;   // null = Google-only account
   isActive:     boolean;
   createdAt:    Date;
@@ -13,7 +13,7 @@ export interface IUser extends Document {
 const UserSchema = new Schema<IUser>({
   email:        { type: String, required: true, lowercase: true, trim: true },
   name:         { type: String, required: true, trim: true },
-  role:         { type: String, enum: ['admin', 'user'], default: 'user' },
+  role:         { type: String, enum: ['admin', 'user', 'hdm', 'hdl'], default: 'user' },
   passwordHash: { type: String, default: null },
   isActive:     { type: Boolean, default: true },
   createdAt:    { type: Date, default: () => new Date() },

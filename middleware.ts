@@ -24,6 +24,13 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // QC-only: allow admin, hdm, hdl
+  if (pathname.startsWith('/qc') || pathname.startsWith('/api/qc')) {
+    if (!(token.role === 'admin' || token.role === 'hdm' || token.role === 'hdl')) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
   return NextResponse.next();
 }
 
