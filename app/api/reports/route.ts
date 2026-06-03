@@ -1,37 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
+import { dbConnect } from '@/lib/db';
+import { Member } from '@/lib/models/Member';
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get('search');
-  const client = new MongoClient(process.env.MONGO_URI!);
   try {
-    await client.connect();
-    const db = client.db(process.env.MONGO_DB!);
+    await dbConnect();
 
-    let query: object = {};
+    let matchStage: object = {};
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), 'i');
-      query = { $or: [{ hubstaffName: regex }, { personalEmail: regex }, { micro1Email: regex }] };
+      matchStage = {
+        $or: [
+          { hubstaffName:  regex },
+          { personalEmail: regex },
+          { micro1Email:   regex },
+        ],
+      };
     }
 
-    // Use members as the base so all experts appear, even those with no tracked time.
-    // Left-join reports to pull in dates/activity for those who do have data.
-    const docs = await db.collection('members').aggregate([
-      { $match: query },
+    const docs = await Member.aggregate([
+      { $match: matchStage },
       {
         $lookup: {
-          from: 'reports',
-          localField: 'hubstaffName',
+          from:         'reports',
+          localField:   'hubstaffName',
           foreignField: 'memberName',
-          as: '_r',
+          as:           '_r',
         },
       },
-      {
-        $addFields: { _report: { $arrayElemAt: ['$_r', 0] } },
-      },
+      { $addFields: { _report: { $arrayElemAt: ['$_r', 0] } } },
       {
         $project: {
-          _id: 0,
+          _id:           0,
           memberName:    '$hubstaffName',
           personalEmail: 1,
           micro1Email:   1,
@@ -45,13 +46,11 @@ export async function GET(req: NextRequest) {
         },
       },
       { $sort: { memberName: 1 } },
-    ]).toArray();
+    ]);
 
     return NextResponse.json(docs);
   } catch (err: unknown) {
     console.error('[/api/reports]', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  } finally {
-    await client.close();
   }
 }

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
+import { dbConnect } from '@/lib/db';
+import { Member } from '@/lib/models/Member';
 
 function fromSecs(s: number): string {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
+  const h  = Math.floor(s / 3600);
+  const m  = Math.floor((s % 3600) / 60);
   const sc = s % 60;
   return `${h}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`;
 }
@@ -20,23 +21,20 @@ export async function GET(req: NextRequest) {
   if (!dateRe.test(from) || !dateRe.test(to)) {
     return NextResponse.json({ error: 'from and to must be YYYY-MM-DD' }, { status: 400 });
   }
-
   if (from > to) {
     return NextResponse.json({ error: 'from must be on or before to' }, { status: 400 });
   }
 
-  const client = new MongoClient(process.env.MONGO_URI!);
   try {
-    await client.connect();
-    const db = client.db(process.env.MONGO_DB!);
+    await dbConnect();
 
-    const docs = await db.collection('members').aggregate([
+    const docs = await Member.aggregate([
       {
         $lookup: {
-          from: 'reports',
-          localField: 'hubstaffName',
+          from:         'reports',
+          localField:   'hubstaffName',
           foreignField: 'memberName',
-          as: '_r',
+          as:           '_r',
         },
       },
       { $addFields: { _report: { $arrayElemAt: ['$_r', 0] } } },
@@ -50,7 +48,7 @@ export async function GET(req: NextRequest) {
                   cond: {
                     $and: [
                       { $gte: ['$$this.k', from] },
-                      { $lte: ['$$this.k', to] },
+                      { $lte: ['$$this.k', to]   },
                     ],
                   },
                 },
@@ -65,7 +63,7 @@ export async function GET(req: NextRequest) {
                       in: {
                         $add: [
                           { $multiply: [{ $ifNull: [{ $toInt: { $arrayElemAt: ['$$parts', 0] } }, 0] }, 3600] },
-                          { $multiply: [{ $ifNull: [{ $toInt: { $arrayElemAt: ['$$parts', 1] } }, 0] }, 60] },
+                          { $multiply: [{ $ifNull: [{ $toInt: { $arrayElemAt: ['$$parts', 1] } }, 0] }, 60  ] },
                           { $ifNull: [{ $toInt: { $arrayElemAt: ['$$parts', 2] } }, 0] },
                         ],
                       },
@@ -78,23 +76,23 @@ export async function GET(req: NextRequest) {
         },
       },
       { $match: { totalSeconds: { $gt: 0 } } },
-      { $sort: { totalSeconds: -1 } },
+      { $sort:  { totalSeconds: -1 } },
       { $limit: 10 },
       {
         $project: {
-          _id: 0,
-          memberName: '$hubstaffName',
-          hdm: 1,
+          _id:         0,
+          memberName:  '$hubstaffName',
+          hdm:         1,
           totalSeconds: 1,
         },
       },
-    ]).toArray();
+    ]);
 
     const result = docs.map((doc, i) => ({
-      rank: i + 1,
-      memberName: doc.memberName as string,
-      hdm: (doc.hdm as string | null) ?? null,
-      totalSeconds: doc.totalSeconds as number,
+      rank:           i + 1,
+      memberName:     doc.memberName  as string,
+      hdm:            (doc.hdm as string | null) ?? null,
+      totalSeconds:   doc.totalSeconds as number,
       totalFormatted: fromSecs(doc.totalSeconds as number),
     }));
 
@@ -102,7 +100,5 @@ export async function GET(req: NextRequest) {
   } catch (err: unknown) {
     console.error('[/api/leaderboard]', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  } finally {
-    await client.close();
   }
 }
