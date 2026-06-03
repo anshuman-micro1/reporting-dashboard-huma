@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import OffboardingsTable from '../../components/offboardings/OffboardingsTable';
+import { Button } from '../../components/ui/Button';
 
 interface Offboarding {
   id: string;
@@ -91,8 +93,8 @@ export default function OffboardingsPage() {
           Offboardings
         </div>
         <div className="header-right">
-          <Link href="/" className="btn-secondary" style={{ textDecoration: 'none', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-            ← Dashboard
+          <Link href="/">
+            <Button variant="ghost">← Dashboard</Button>
           </Link>
         </div>
       </header>
@@ -105,94 +107,16 @@ export default function OffboardingsPage() {
           </span>
         </div>
 
-        <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 160px)' }}>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ minWidth: 180 }}>Name</th>
-                <th style={{ minWidth: 200 }}>Personal Email</th>
-                <th style={{ minWidth: 200 }}>Micro1 Email</th>
-                <th style={{ minWidth: 110 }}>Request Date</th>
-                <th style={{ minWidth: 100 }}>Status</th>
-                <th style={{ minWidth: 130 }}>Confirmation Date</th>
-                <th style={{ minWidth: 160 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr className="state-row"><td colSpan={7}><span className="spinner" />Loading…</td></tr>
-              ) : error ? (
-                <tr className="state-row"><td colSpan={7} style={{ color: '#f87171' }}>Error: {error}</td></tr>
-              ) : rows.length === 0 ? (
-                <tr className="state-row"><td colSpan={7}>No offboarding requests yet</td></tr>
-              ) : (
-                rows.map(row => {
-                  const isConfirming = confirmAction?.id === row.id && confirmAction?.action === 'confirm';
-                  const isCancelling = confirmAction?.id === row.id && confirmAction?.action === 'cancel';
-                  const isDeleting = confirmAction?.id === row.id && confirmAction?.action === 'delete';
-                  return (
-                    <tr key={row.id} className={row.status === 'resolved' ? 'inv-row-closed' : ''}>
-                      <td style={{ fontWeight: 600 }}>{row.name}</td>
-                      <td className="dim">{row.personalEmail || '—'}</td>
-                      <td className="dim">{row.micro1Email || '—'}</td>
-                      <td className="dim">{row.requestDate}</td>
-                      <td>
-                        <span className={`offb-status-badge offb-status-${row.status}`}>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="dim">{row.confirmationDate || '—'}</td>
-                      <td>
-                        <div className="offb-actions">
-                          {/* Confirm Offboard — only for pending */}
-                          {row.status === 'pending' && !isConfirming && (
-                            <button
-                              className="offb-confirm-btn"
-                              disabled={!!actioning || isCancelling}
-                              onClick={() => setConfirmAction({ id: row.id, action: 'confirm' })}
-                            >
-                              {actioning === row.id + 'confirm' ? 'Confirming…' : 'Confirm Offboard'}
-                            </button>
-                          )}
-                          {row.status === 'pending' && isConfirming && (
-                            <div className="inv-confirm-row">
-                              <span className="inv-confirm-label" style={{ color: '#93c5fd' }}>Offboard?</span>
-                              <button className="inv-confirm-yes" onClick={() => handleAction(row.id, 'confirm')}>Yes</button>
-                              <button className="inv-confirm-no" onClick={() => setConfirmAction(null)}>No</button>
-                            </div>
-                          )}
-
-                          {/* Cancel (delete) — for pending */}
-                          {row.status === 'pending' && !isDeleting && (
-                            <button
-                              className="offb-cancel-btn"
-                              disabled={!!actioning || isConfirming}
-                              onClick={() => setConfirmAction({ id: row.id, action: 'delete' })}
-                            >
-                              {actioning === row.id + 'delete' ? 'Cancelling…' : 'Cancel'}
-                            </button>
-                          )}
-                          {row.status === 'pending' && isDeleting && (
-                            <div className="inv-confirm-row">
-                              <span className="inv-confirm-label">Cancel request?</span>
-                              <button className="inv-confirm-yes" onClick={() => handleDelete(row.id)}>Yes</button>
-                              <button className="inv-confirm-no" onClick={() => setConfirmAction(null)}>No</button>
-                            </div>
-                          )}
-
-                          {/* Cancel — disabled for resolved */}
-                          {row.status === 'resolved' && (
-                            <button className="offb-cancel-btn" disabled>Cancel</button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        <OffboardingsTable
+          rows={rows}
+          loading={loading}
+          error={error}
+          confirmAction={confirmAction}
+          actioning={actioning}
+          onSetConfirmAction={setConfirmAction}
+          onAction={handleAction}
+          onDelete={handleDelete}
+        />
       </main>
     </>
   );

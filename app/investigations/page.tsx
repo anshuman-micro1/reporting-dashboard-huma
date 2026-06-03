@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import InvestigationsTable from '../../components/investigations/InvestigationsTable';
+import { Button } from '../../components/ui/Button';
 
 interface Investigation {
   id: string;
@@ -20,7 +22,17 @@ export default function InvestigationsPage() {
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (value.length >= 4 || value.length === 0) {
+      searchTimerRef.current = setTimeout(() => setDebouncedSearch(value), 300);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/investigations')
@@ -53,8 +65,8 @@ export default function InvestigationsPage() {
   const filteredRows = rows
     .filter(r => {
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
+      if (!debouncedSearch.trim()) return true;
+      const q = debouncedSearch.toLowerCase();
       return (
         r.name.toLowerCase().includes(q) ||
         (r.personalEmail ?? '').toLowerCase().includes(q) ||
@@ -81,8 +93,8 @@ export default function InvestigationsPage() {
           Investigations
         </div>
         <div className="header-right">
-          <Link href="/" className="btn-secondary" style={{ textDecoration: 'none', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-            ← Dashboard
+          <Link href="/">
+            <Button variant="ghost">← Dashboard</Button>
           </Link>
         </div>
       </header>
@@ -95,32 +107,24 @@ export default function InvestigationsPage() {
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <div className="flex gap-2 mb-3">
           <input
-            className="search-box"
+            className="search-box flex-1"
             type="text"
-            placeholder="Search by name or email…"
+            placeholder="Search by name or email (min 4 chars)…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ flex: 1 }}
+            onChange={e => handleSearchChange(e.target.value)}
           />
-          <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+          <div className="flex rounded-lg overflow-hidden border border-[var(--border)]">
             {(['all', 'open', 'closed'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                style={{
-                  padding: '0 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  border: 'none',
-                  borderRadius: 0,
-                  cursor: 'pointer',
-                  background: statusFilter === s ? 'var(--accent)' : 'var(--surface)',
-                  color: statusFilter === s ? '#fff' : 'var(--text-secondary)',
-                  transition: 'background 0.15s',
-                  textTransform: 'capitalize',
-                }}
+                className={`px-3.5 text-[12px] font-semibold capitalize transition-colors border-none cursor-pointer ${
+                  statusFilter === s
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'bg-[var(--surface)] text-[var(--text-secondary)]'
+                }`}
               >
                 {s}
               </button>
@@ -128,72 +132,15 @@ export default function InvestigationsPage() {
           </div>
         </div>
 
-        <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 160px)' }}>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ minWidth: 180 }}>Name</th>
-                <th style={{ minWidth: 210 }}>Personal Email</th>
-                <th style={{ minWidth: 210 }}>Micro1 Email</th>
-                <th style={{ minWidth: 120 }}>Date</th>
-                <th style={{ minWidth: 90 }}>Status</th>
-                <th style={{ minWidth: 300 }}>Notes</th>
-                <th style={{ minWidth: 120 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr className="state-row">
-                  <td colSpan={7}><span className="spinner" />Loading…</td>
-                </tr>
-              ) : error ? (
-                <tr className="state-row">
-                  <td colSpan={7} style={{ color: '#f87171' }}>Error: {error}</td>
-                </tr>
-              ) : filteredRows.length === 0 ? (
-                <tr className="state-row">
-                  <td colSpan={7}>No investigations match</td>
-                </tr>
-              ) : (
-                filteredRows.map(inv => (
-                  <tr key={inv.id} className={inv.status === 'closed' ? 'inv-row-closed' : ''}>
-                    <td style={{ fontWeight: 600 }}>{inv.name}</td>
-                    <td className="dim">{inv.personalEmail || '—'}</td>
-                    <td className="dim">{inv.micro1Email || '—'}</td>
-                    <td className="dim">{inv.investigationDate}</td>
-                    <td>
-                      <span className={`inv-status-badge inv-status-${inv.status}`}>
-                        {inv.status}
-                      </span>
-                    </td>
-                    <td style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{inv.notes}</td>
-                    <td>
-                      {inv.status === 'open' && confirmClose !== inv.id && (
-                        <button
-                          className="inv-close-btn"
-                          disabled={closing === inv.id}
-                          onClick={() => setConfirmClose(inv.id)}
-                        >
-                          {closing === inv.id ? 'Closing…' : 'Close'}
-                        </button>
-                      )}
-                      {inv.status === 'open' && confirmClose === inv.id && (
-                        <div className="inv-confirm-row">
-                          <span className="inv-confirm-label">Close?</span>
-                          <button className="inv-confirm-yes" onClick={() => handleClose(inv.id)}>Yes</button>
-                          <button className="inv-confirm-no" onClick={() => setConfirmClose(null)}>No</button>
-                        </div>
-                      )}
-                      {inv.status === 'closed' && (
-                        <span className="dim" style={{ fontSize: 11 }}>Closed</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <InvestigationsTable
+          rows={filteredRows}
+          loading={loading}
+          error={error}
+          confirmClose={confirmClose}
+          closing={closing}
+          onSetConfirmClose={setConfirmClose}
+          onClose={handleClose}
+        />
       </main>
     </>
   );

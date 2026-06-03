@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
 import axios from 'axios';
 import { getCachedCredentials, setCachedCredentials } from '@/lib/credentials-cache';
+import { dbConnect } from '@/lib/db';
+import { Member } from '@/lib/models/Member';
+import { Settings } from '@/lib/models/Settings';
 
 export const maxDuration = 60;
 
@@ -20,15 +22,10 @@ async function buildHeaders() {
 
   let creds = getCachedCredentials();
   if (!creds) {
-    const client = new MongoClient(process.env.MONGO_URI!);
-    try {
-      await client.connect();
-      const doc = await client.db(process.env.MONGO_DB!).collection('settings').findOne({ _id: 'hubstaff_credentials' as never });
-      creds = (doc || {}) as Record<string, string>;
-      setCachedCredentials(creds);
-    } finally {
-      await client.close();
-    }
+    await dbConnect();
+    const doc = await Settings.findById('hubstaff_credentials').lean();
+    creds = (doc || {}) as Record<string, string>;
+    setCachedCredentials(creds);
   }
   const get = (key: string) => (creds![key] || process.env[key] || '') as string;
 
@@ -76,7 +73,6 @@ async function fetchAllMembers(): Promise<HubstaffMember[]> {
       const body = typeof raw === 'string'
         ? raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
         : JSON.stringify(raw).slice(0, 300);
-      console.error(`[sync] Hubstaff HTTP ${res.status}:`, body);
       throw new Error(`Hubstaff API returned HTTP ${res.status}${body ? ` — ${body}` : ''}`);
     }
 
@@ -90,52 +86,45 @@ async function fetchAllMembers(): Promise<HubstaffMember[]> {
 }
 
 async function upsertMembers(members: HubstaffMember[]): Promise<number> {
-  const client = new MongoClient(process.env.MONGO_URI!);
-  try {
-    await client.connect();
-    const collection = client.db(process.env.MONGO_DB!).collection('members');
+  // For unique names: link existing records without hubstaffId (preserves emails)
+  const nameCounts: Record<string, number> = {};
+  for (const { name } of members) nameCounts[name] = (nameCounts[name] || 0) + 1;
 
-    // For unique names: link existing records that have no hubstaffId yet (preserves emails etc.)
-    const nameCounts: Record<string, number> = {};
-    for (const { name } of members) nameCounts[name] = (nameCounts[name] || 0) + 1;
-
-    const uniqueNames = members.filter(({ name }) => nameCounts[name] === 1);
-    if (uniqueNames.length > 0) {
-      await collection.bulkWrite(
-        uniqueNames.map(({ id, name }) => ({
-          updateOne: {
-            filter: { hubstaffName: name, hubstaffId: { $exists: false } },
-            update: { $set: { hubstaffId: id, updatedAt: new Date() } },
-          },
-        })),
-        { ordered: false },
-      );
-    }
-
-    // Upsert all members by hubstaffId — $setOnInsert only fires for new docs
-    const result = await collection.bulkWrite(
-      members.map(({ id, name }) => ({
+  const uniqueNames = members.filter(({ name }) => nameCounts[name] === 1);
+  if (uniqueNames.length > 0) {
+    await Member.bulkWrite(
+      uniqueNames.map(({ id, name }) => ({
         updateOne: {
-          filter: { hubstaffId: id },
-          update: {
-            $set: { hubstaffId: id, updatedAt: new Date() },
-            $setOnInsert: { hubstaffName: name, createdAt: new Date() },
-          },
-          upsert: true,
+          filter: { hubstaffName: name, hubstaffId: { $exists: false } },
+          update: { $set: { hubstaffId: id, updatedAt: new Date() } },
         },
       })),
       { ordered: false },
     );
-
-    return result.upsertedCount;
-  } finally {
-    await client.close();
   }
+
+  // Upsert all members by hubstaffId
+  const result = await Member.bulkWrite(
+    members.map(({ id, name }) => ({
+      updateOne: {
+        filter: { hubstaffId: id },
+        update: {
+          $set:         { hubstaffId: id, updatedAt: new Date() },
+          $setOnInsert: { hubstaffName: name, createdAt: new Date() },
+        },
+        upsert: true,
+      },
+    })),
+    { ordered: false },
+  );
+
+  return result.upsertedCount;
 }
 
 export async function POST() {
   try {
     const members = await fetchAllMembers();
+    await dbConnect();
     const inserted = await upsertMembers(members);
     return NextResponse.json({ ok: true, inserted, total: members.length });
   } catch (err: unknown) {

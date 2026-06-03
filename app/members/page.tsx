@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import MemberTable from '../../components/members/MemberTable';
+import { Button } from '../../components/ui/Button';
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -212,7 +214,7 @@ export default function MembersUploadPage() {
   // search debounce
   useEffect(() => {
     const q = searchQuery.trim();
-    if (q.length < 2) {
+    if (q.length < 4) {
       setSearchResults([]);
       setShowDropdown(false);
       return;
@@ -399,7 +401,7 @@ export default function MembersUploadPage() {
     }
   };
 
-  const dropdownVisible = showDropdown && searchQuery.trim().length >= 2;
+  const dropdownVisible = showDropdown && searchQuery.trim().length >= 4;
 
   return (
     <>
@@ -416,53 +418,40 @@ export default function MembersUploadPage() {
           Update Experts
         </div>
         <div className="header-right">
-          <Link href="/" className="btn-secondary" style={{ textDecoration: 'none', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-            ← Dashboard
+          <Link href="/">
+            <Button variant="ghost">← Dashboard</Button>
           </Link>
         </div>
       </header>
 
-      <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 24px' }}>
+      <main className="max-w-[900px] mx-auto px-6 py-6">
 
         {/* ── Search Expert ── */}
-        <div style={{
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 10, padding: 18, marginBottom: 24,
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-            Search Expert
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 12 }}>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[10px] p-[18px] mb-6">
+          <div className="text-[13px] font-semibold text-[var(--text)] mb-1">Search Expert</div>
+          <div className="text-[12px] text-[var(--text-dim)] mb-3">
             Find an expert by name, personal email, or micro1 email to view and edit their details.
           </div>
 
-          <div ref={searchRef} style={{ position: 'relative' }}>
+          <div ref={searchRef} className="relative">
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by name, personal email or micro1 email…"
-              style={{ paddingLeft: 12 }}
+              placeholder="Search by name, personal email or micro1 email (min 4 chars)…"
+              className="pl-3 w-full"
             />
 
             {dropdownVisible && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                background: 'var(--surface-2)', border: '1px solid var(--border)',
-                borderRadius: 8, zIndex: 200,
-                boxShadow: '0 8px 24px rgba(0,0,0,.45)',
-                maxHeight: 300, overflowY: 'auto',
-              }}>
+              <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-[var(--surface-2)] border border-[var(--border)] rounded-lg z-[200] shadow-[0_8px_24px_rgba(0,0,0,.45)] max-h-[300px] overflow-y-auto">
                 {searchLoading && (
-                  <div style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="flex items-center gap-2 px-4 py-3 text-[13px] text-[var(--text-dim)]">
                     <span className="spinner" style={{ width: 13, height: 13, margin: 0 }} />
                     Searching…
                   </div>
                 )}
                 {!searchLoading && searchResults.length === 0 && (
-                  <div style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 13 }}>
-                    No experts found
-                  </div>
+                  <div className="px-4 py-3 text-[13px] text-[var(--text-dim)]">No experts found</div>
                 )}
                 {!searchLoading && searchResults.map(expert => (
                   <div
@@ -470,22 +459,17 @@ export default function MembersUploadPage() {
                     onMouseEnter={() => setHoveredId(expert.id)}
                     onMouseLeave={() => setHoveredId(null)}
                     onClick={() => openEdit(expert)}
-                    style={{
-                      padding: '10px 14px',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid var(--border-soft)',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-                      background: hoveredId === expert.id ? 'var(--row-hover)' : 'transparent',
-                      transition: 'background 0.12s',
-                    }}
+                    className={`flex justify-between items-center gap-3 px-[14px] py-[10px] cursor-pointer border-b border-[var(--border-soft)] transition-colors ${
+                      hoveredId === expert.id ? 'bg-[var(--row-hover)]' : 'bg-transparent'
+                    }`}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{expert.name}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div className="flex flex-col gap-[3px] min-w-0">
+                      <span className="font-semibold text-[13px] text-[var(--text)]">{expert.name}</span>
+                      <span className="text-[11px] text-[var(--text-dim)] overflow-hidden text-ellipsis whitespace-nowrap">
                         {[expert.personalEmail, expert.micro1Email].filter(Boolean).join(' · ') || 'No emails set'}
                       </span>
                     </div>
-                    <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>Edit →</span>
+                    <span className="text-[11px] text-[var(--accent)] font-semibold shrink-0">Edit →</span>
                   </div>
                 ))}
               </div>
@@ -496,96 +480,65 @@ export default function MembersUploadPage() {
         {/* ── CSV Upload ── */}
         <div className="inv-page-header">
           <h2 className="inv-page-title">Upload Expert CSV</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="flex items-center gap-2.5">
             {rows.length > 0 && !result && (
               <span className="result-count">{rows.length} row{rows.length !== 1 ? 's' : ''} parsed</span>
             )}
-            <button
+            <Button
+              variant="secondary"
               onClick={handleSync}
               disabled={syncing}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                color: 'var(--text)', cursor: syncing ? 'not-allowed' : 'pointer',
-                opacity: syncing ? 0.6 : 1,
-              }}
+              className={`gap-[7px] px-4 py-[7px] text-[13px] ${syncing ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               {syncing
                 ? <><span className="spinner" style={{ width: 11, height: 11 }} />Fetching…</>
-                : <>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
-                      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
-                    </svg>
-                    Fetch Experts from Hubstaff
-                  </>
+                : <><img src="/icons8-hubstaff-240.png" width="15" height="15" alt="" style={{ borderRadius: 3 }} />Fetch Experts from Hubstaff</>
               }
-            </button>
+            </Button>
           </div>
         </div>
 
         {syncResult && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '12px 16px', borderRadius: 10, marginBottom: 16,
-            background: '#0d2318', border: '1px solid #166534',
-            color: '#4ade80', fontSize: 13, fontWeight: 600,
-          }}>
+          <div className="flex items-center gap-2.5 px-4 py-3 rounded-[10px] mb-4 bg-[#0d2318] border border-[#166534] text-[#4ade80] text-[13px] font-semibold">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
             {syncResult.inserted} new expert{syncResult.inserted !== 1 ? 's' : ''} added to DB
-            <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>
+            <span className="text-[var(--text-dim)] font-normal">
               ({syncResult.total} fetched from Hubstaff)
             </span>
-            <button className="btn-secondary" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => setSyncResult(null)}>✕</button>
+            <Button variant="secondary" className="ml-auto text-[12px] px-2.5 py-1" onClick={() => setSyncResult(null)}>✕</Button>
           </div>
         )}
         {syncError && (
-          <div className="modal-error show" style={{ marginBottom: 16 }}>{syncError}</div>
+          <div className="modal-error show mb-4">{syncError}</div>
         )}
 
-        <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
-          Upload a CSV with columns: <strong style={{ color: 'var(--text)' }}>Member Name</strong>,{' '}
-          <strong style={{ color: 'var(--text)' }}>Personal Email</strong>,{' '}
-          <strong style={{ color: 'var(--text)' }}>Micro1 Email</strong>,{' '}
-          <strong style={{ color: 'var(--text)' }}>HDM</strong>,{' '}
-          <strong style={{ color: 'var(--text)' }}>Team</strong> (optional).
+        <p className="text-[13px] text-[var(--text-dim)] mb-5 leading-relaxed">
+          Upload a CSV with columns: <strong className="text-[var(--text)]">Member Name</strong>,{' '}
+          <strong className="text-[var(--text)]">Personal Email</strong>,{' '}
+          <strong className="text-[var(--text)]">Micro1 Email</strong>,{' '}
+          <strong className="text-[var(--text)]">HDM</strong>,{' '}
+          <strong className="text-[var(--text)]">Team</strong> (optional).
           Experts are matched by name (case-insensitive). Unmatched names are listed at the end.
         </p>
 
         {!result && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <label
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                color: 'var(--text)', fontSize: 13, fontWeight: 600,
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
+          <div className="flex items-center gap-3 mb-5">
+            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-[13px] font-semibold">
+              <img src="/icons8-excel-240.png" width="16" height="16" alt="" style={{ borderRadius: 3 }} />
               Choose CSV
-              <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} style={{ display: 'none' }} />
+              <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
             </label>
-            {fileName && <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{fileName}</span>}
+            {fileName && <span className="text-[13px] text-[var(--text-dim)]">{fileName}</span>}
             {rows.length > 0 && (
               <>
-                <div style={{ flex: 1 }} />
-                <button className="btn-secondary" onClick={handleReset} style={{ fontSize: 13 }}>Clear</button>
+                <div className="flex-1" />
+                <Button variant="secondary" onClick={handleReset} className="text-[13px]">Clear</Button>
                 <button
                   onClick={handleUpload}
                   disabled={uploading}
-                  style={{
-                    padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                    background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer',
-                    opacity: uploading ? 0.6 : 1,
-                  }}
+                  className={`px-5 py-2 rounded-lg text-[13px] font-semibold bg-[var(--accent)] text-white border-none cursor-pointer ${uploading ? 'opacity-60' : ''}`}
                 >
                   {uploading ? 'Updating…' : `Update ${rows.length} expert${rows.length !== 1 ? 's' : ''}`}
                 </button>
@@ -594,40 +547,28 @@ export default function MembersUploadPage() {
           </div>
         )}
 
-        {parseError && <div className="modal-error show" style={{ marginBottom: 16 }}>{parseError}</div>}
-        {apiError   && <div className="modal-error show" style={{ marginBottom: 16 }}>{apiError}</div>}
+        {parseError && <div className="modal-error show mb-4">{parseError}</div>}
+        {apiError   && <div className="modal-error show mb-4">{apiError}</div>}
 
         {result && (
-          <div style={{ marginBottom: 24 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '14px 18px', borderRadius: 10,
-              background: '#0d2318', border: '1px solid #166534',
-              color: '#4ade80', fontSize: 14, fontWeight: 600, marginBottom: 12,
-            }}>
+          <div className="mb-6">
+            <div className="flex items-center gap-3 px-[18px] py-[14px] rounded-[10px] bg-[#0d2318] border border-[#166534] text-[#4ade80] text-[14px] font-semibold mb-3">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
               {result.updated} expert{result.updated !== 1 ? 's' : ''} updated successfully
-              <div style={{ flex: 1 }} />
-              <button className="btn-secondary" onClick={handleReset} style={{ fontSize: 12 }}>Upload another</button>
+              <div className="flex-1" />
+              <Button variant="secondary" onClick={handleReset} className="text-[12px]">Upload another</Button>
             </div>
 
             {result.notFound.length > 0 && (
-              <div style={{
-                padding: '14px 18px', borderRadius: 10,
-                background: '#1a0f0f', border: '1px solid #7f1d1d',
-              }}>
-                <div style={{ color: '#f87171', fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+              <div className="px-[18px] py-[14px] rounded-[10px] bg-[#1a0f0f] border border-[#7f1d1d]">
+                <div className="text-[#f87171] text-[13px] font-semibold mb-2.5">
                   {result.notFound.length} name{result.notFound.length !== 1 ? 's' : ''} not found in database
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <div className="flex flex-wrap gap-1.5">
                   {result.notFound.map(name => (
-                    <span key={name} style={{
-                      padding: '3px 10px', borderRadius: 6,
-                      background: '#2d1515', border: '1px solid #7f1d1d',
-                      color: '#fca5a5', fontSize: 12,
-                    }}>
+                    <span key={name} className="px-2.5 py-[3px] rounded-md bg-[#2d1515] border border-[#7f1d1d] text-[#fca5a5] text-[12px]">
                       {name}
                     </span>
                   ))}
@@ -638,76 +579,40 @@ export default function MembersUploadPage() {
         )}
 
         {rows.length > 0 && !result && (
-          <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ minWidth: 200 }}>Member Name</th>
-                  <th style={{ minWidth: 210 }}>Personal Email</th>
-                  <th style={{ minWidth: 210 }}>Micro1 Email</th>
-                  <th style={{ minWidth: 160 }}>HDM</th>
-                  <th style={{ minWidth: 120 }}>Team</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 600 }}>{row.name || '—'}</td>
-                    <td className="dim">{row.personalEmail || '—'}</td>
-                    <td className="dim">{row.expertEmail || '—'}</td>
-                    <td className="dim">{row.hdm || '—'}</td>
-                    <td className="dim">{row.team || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <MemberTable rows={rows} />
         )}
         {/* ── QC Tracking Upload ── */}
-        <div style={{ marginTop: 40 }}>
+        <div className="mt-10">
           <div className="inv-page-header">
             <h2 className="inv-page-title">Upload QC Tracking CSV</h2>
             {qcRows.length > 0 && !qcResult && (
               <span className="result-count">{qcRows.length} task row{qcRows.length !== 1 ? 's' : ''} parsed</span>
             )}
           </div>
-          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
+          <p className="text-[13px] text-[var(--text-dim)] mb-5 leading-relaxed">
             Upload the daily QC Tracking sheet to sync task data into expert reports.
-            Required columns: <strong style={{ color: 'var(--text)' }}>Date</strong>,{' '}
-            <strong style={{ color: 'var(--text)' }}>Expert Email</strong>,{' '}
-            <strong style={{ color: 'var(--text)' }}>Feather Link</strong>,{' '}
-            <strong style={{ color: 'var(--text)' }}>Recording Length</strong>,{' '}
-            <strong style={{ color: 'var(--text)' }}>App</strong>.
+            Required columns: <strong className="text-[var(--text)]">Date</strong>,{' '}
+            <strong className="text-[var(--text)]">Expert Email</strong>,{' '}
+            <strong className="text-[var(--text)]">Feather Link</strong>,{' '}
+            <strong className="text-[var(--text)]">Recording Length</strong>,{' '}
+            <strong className="text-[var(--text)]">App</strong>.
           </p>
 
           {!qcResult && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-              <label style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                color: 'var(--text)', fontSize: 13, fontWeight: 600,
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
+            <div className="flex items-center gap-3 mb-5">
+              <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-[13px] font-semibold">
+                <img src="/icons8-google-240.png" width="16" height="16" alt="" style={{ borderRadius: 3 }} />
                 Choose QC CSV
-                <input ref={qcFileRef} type="file" accept=".csv,text/csv" onChange={handleQcFile} style={{ display: 'none' }} />
+                <input ref={qcFileRef} type="file" accept=".csv,text/csv" onChange={handleQcFile} className="hidden" />
               </label>
-              {qcFileName && <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{qcFileName}</span>}
+              {qcFileName && <span className="text-[13px] text-[var(--text-dim)]">{qcFileName}</span>}
               {qcRows.length > 0 && (
                 <>
-                  <div style={{ flex: 1 }} />
+                  <div className="flex-1" />
                   <button
                     onClick={handleQcUpload}
                     disabled={qcUploading}
-                    style={{
-                      padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      background: 'var(--accent)', color: '#fff', border: 'none',
-                      cursor: qcUploading ? 'not-allowed' : 'pointer', opacity: qcUploading ? 0.6 : 1,
-                    }}
+                    className={`px-5 py-2 rounded-lg text-[13px] font-semibold bg-[var(--accent)] text-white border-none cursor-pointer inline-flex items-center gap-2 ${qcUploading ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     {qcUploading
                       ? <><span className="spinner" style={{ width: 13, height: 13 }} />Updating…</>
@@ -718,39 +623,30 @@ export default function MembersUploadPage() {
             </div>
           )}
 
-          {qcParseError && <div className="modal-error show" style={{ marginBottom: 16 }}>{qcParseError}</div>}
-          {qcApiError   && <div className="modal-error show" style={{ marginBottom: 16 }}>{qcApiError}</div>}
+          {qcParseError && <div className="modal-error show mb-4">{qcParseError}</div>}
+          {qcApiError   && <div className="modal-error show mb-4">{qcApiError}</div>}
 
           {qcResult && (
-            <div style={{ marginBottom: 24 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '14px 18px', borderRadius: 10,
-                background: '#0d2318', border: '1px solid #166534',
-                color: '#4ade80', fontSize: 14, fontWeight: 600, marginBottom: 12,
-              }}>
+            <div className="mb-6">
+              <div className="flex items-center gap-3 px-[18px] py-[14px] rounded-[10px] bg-[#0d2318] border border-[#166534] text-[#4ade80] text-[14px] font-semibold mb-3">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
                 {qcResult.updated} expert report{qcResult.updated !== 1 ? 's' : ''} updated with task data
-                <div style={{ flex: 1 }} />
-                <button className="btn-secondary" onClick={() => setQcResult(null)} style={{ fontSize: 12 }}>
+                <div className="flex-1" />
+                <Button variant="secondary" onClick={() => setQcResult(null)} className="text-[12px]">
                   Upload another
-                </button>
+                </Button>
               </div>
 
               {qcResult.notFound.length > 0 && (
-                <div style={{ padding: '14px 18px', borderRadius: 10, background: '#1a0f0f', border: '1px solid #7f1d1d' }}>
-                  <div style={{ color: '#f87171', fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+                <div className="px-[18px] py-[14px] rounded-[10px] bg-[#1a0f0f] border border-[#7f1d1d]">
+                  <div className="text-[#f87171] text-[13px] font-semibold mb-2.5">
                     {qcResult.notFound.length} expert{qcResult.notFound.length !== 1 ? 's' : ''} not found in reports
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <div className="flex flex-wrap gap-1.5">
                     {qcResult.notFound.map(name => (
-                      <span key={name} style={{
-                        padding: '3px 10px', borderRadius: 6,
-                        background: '#2d1515', border: '1px solid #7f1d1d',
-                        color: '#fca5a5', fontSize: 12,
-                      }}>
+                      <span key={name} className="px-2.5 py-[3px] rounded-md bg-[#2d1515] border border-[#7f1d1d] text-[#fca5a5] text-[12px]">
                         {name}
                       </span>
                     ))}
@@ -778,12 +674,12 @@ export default function MembersUploadPage() {
             <div className="inv-member-info">
               <div className="inv-info-row">
                 <span className="inv-info-label">Name</span>
-                <span className="inv-info-value" style={{ fontWeight: 700 }}>{editExpert.name}</span>
+                <span className="inv-info-value font-bold">{editExpert.name}</span>
               </div>
             </div>
 
             {saveSuccess && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#4ade80', fontWeight: 600 }}>
+              <div className="flex items-center gap-2 text-[13px] text-[#4ade80] font-semibold">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
@@ -795,7 +691,7 @@ export default function MembersUploadPage() {
 
             {!saveSuccess && (
               <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="flex flex-col gap-3.5">
                   {EDIT_FIELDS.map(({ key, label, placeholder }) => (
                     <div className="modal-field" key={key}>
                       <label>{label}</label>
@@ -804,7 +700,7 @@ export default function MembersUploadPage() {
                         value={editFields[key]}
                         onChange={e => setEditFields(prev => ({ ...prev, [key]: e.target.value }))}
                         placeholder={placeholder}
-                        style={{ paddingLeft: 12 }}
+                        className="pl-3"
                         disabled={saving}
                       />
                     </div>
@@ -812,17 +708,13 @@ export default function MembersUploadPage() {
                 </div>
 
                 <div className="modal-actions">
-                  <button className="btn-secondary" onClick={closeModal} disabled={saving}>
+                  <Button variant="secondary" onClick={closeModal} disabled={saving}>
                     Cancel
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setShowConfirm(true)}
                     disabled={saving}
-                    style={{
-                      padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      background: 'var(--accent)', color: '#fff', border: 'none',
-                      cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
-                    }}
+                    className={`px-5 py-2 rounded-lg text-[13px] font-semibold bg-[var(--accent)] text-white border-none ${saving ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     Save
                   </button>
@@ -838,23 +730,19 @@ export default function MembersUploadPage() {
         <div className="modal-overlay open" style={{ zIndex: 600 }}>
           <div className="modal" style={{ width: 380, maxWidth: '95vw', gap: 16 }}>
             <div className="modal-title">Confirm Update</div>
-            <p style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+            <p className="text-[13px] text-[var(--text-dim)] leading-relaxed">
               Save changes to{' '}
-              <strong style={{ color: 'var(--text)' }}>{editExpert.name}</strong>?
+              <strong className="text-[var(--text)]">{editExpert.name}</strong>?
               This will overwrite their current details in the database.
             </p>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowConfirm(false)} disabled={saving}>
+              <Button variant="secondary" onClick={() => setShowConfirm(false)} disabled={saving}>
                 Cancel
-              </button>
+              </Button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                style={{
-                  padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                  background: 'var(--accent)', color: '#fff', border: 'none',
-                  cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
-                }}
+                className={`px-5 py-2 rounded-lg text-[13px] font-semibold bg-[var(--accent)] text-white border-none inline-flex items-center gap-2 ${saving ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
               >
                 {saving ? <><span className="spinner" style={{ width: 13, height: 13 }} />Saving…</> : 'Confirm'}
               </button>

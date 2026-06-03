@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
 import axios from 'axios';
+import { dbConnect } from '@/lib/db';
+import { DailyReport } from '@/lib/models/DailyReport';
 
 export const maxDuration = 60;
 
@@ -13,8 +14,8 @@ function toSecs(str: string): number {
 }
 
 function fromSecs(s: number): string {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
+  const h  = Math.floor(s / 3600);
+  const m  = Math.floor((s % 3600) / 60);
   const sc = s % 60;
   return `${h}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`;
 }
@@ -88,22 +89,19 @@ async function fetchAndBuildDoc(date: string) {
   const { data: csvText } = await axios.get<string>(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:150.0) Gecko/20100101 Firefox/150.0',
-      'Accept': '*/*',
+      Accept: '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': `https://app.hubstaff.com/reports/${orgId}/team/time_and_activities`,
-      'DNT': '1',
-      'Connection': 'keep-alive',
-      'Cookie': cookieParts.join('; '),
+      Referer: `https://app.hubstaff.com/reports/${orgId}/team/time_and_activities`,
+      DNT: '1',
+      Connection: 'keep-alive',
+      Cookie: cookieParts.join('; '),
     },
     responseType: 'text',
     maxRedirects: 5,
     validateStatus: s => s >= 200 && s < 300,
   });
 
-  console.log(`[daily_report] CSV header: ${csvText.split('\n')[0]}`);
   const rows = parseCsv(csvText);
-  console.log(`[daily_report] ${rows.length} rows, keys: ${rows[0] ? Object.keys(rows[0]).join(', ') : 'none'}`);
-
   if (!rows.length) throw new Error('No data — check cookies or date range');
 
   const memberMap: Record<string, { totalSecs: number; activityWeightedSum: number; activityTotalSecs: number }> = {};
@@ -112,7 +110,7 @@ async function fetchAndBuildDoc(date: string) {
     const name = row['member'];
     if (!name) continue;
     const secs = toSecs(row['total_hours']);
-    const act = parseInt(row['activity_%'] ?? '');
+    const act  = parseInt(row['activity_%'] ?? '');
     if (!memberMap[name]) memberMap[name] = { totalSecs: 0, activityWeightedSum: 0, activityTotalSecs: 0 };
     memberMap[name].totalSecs += secs;
     if (!isNaN(act) && secs > 0) {
@@ -127,7 +125,9 @@ async function fetchAndBuildDoc(date: string) {
   for (const [name, m] of Object.entries(memberMap)) {
     member_data[name] = {
       total_hours: fromSecs(m.totalSecs),
-      activity: m.activityTotalSecs > 0 ? `${Math.round(m.activityWeightedSum / m.activityTotalSecs)}%` : '0%',
+      activity: m.activityTotalSecs > 0
+        ? `${Math.round(m.activityWeightedSum / m.activityTotalSecs)}%`
+        : '0%',
     };
     grandTotalSecs      += m.totalSecs;
     weightedActivitySum  += m.activityWeightedSum;
@@ -138,7 +138,9 @@ async function fetchAndBuildDoc(date: string) {
   return {
     date,
     total_time:               fromSecs(grandTotalSecs),
-    average_activity:         weightedActivityBase > 0 ? `${Math.round(weightedActivitySum / weightedActivityBase)}%` : '0%',
+    average_activity:         weightedActivityBase > 0
+      ? `${Math.round(weightedActivitySum / weightedActivityBase)}%`
+      : '0%',
     average_hours_per_member: memberCount > 0 ? fromSecs(Math.round(grandTotalSecs / memberCount)) : '0:00:00',
     member_data,
     updatedAt: new Date(),
@@ -153,53 +155,38 @@ function lastNDays(n: number): string[] {
   });
 }
 
-async function upsertDoc(doc: Record<string, unknown>, mongoUri: string, mongoDb: string) {
-  const client = new MongoClient(mongoUri);
-  try {
-    await client.connect();
-    await client.db(mongoDb).collection('daily_report').updateOne(
-      { date: doc.date },
-      { $set: doc, $setOnInsert: { createdAt: new Date() } },
-      { upsert: true },
-    );
-  } finally {
-    await client.close();
-  }
-}
-
-// ── GET — always serve from daily_report collection ───────────
+// ── GET ────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get('date');
   if (!date) return NextResponse.json({ error: 'date param required' }, { status: 400 });
 
-  const client = new MongoClient(process.env.MONGO_URI!);
   try {
-    await client.connect();
-    const existing = await client.db(process.env.MONGO_DB!).collection('daily_report')
-      .findOne({ date }, { projection: { _id: 0 } });
-    if (existing) return NextResponse.json(existing);
-    return NextResponse.json(null);
+    await dbConnect();
+    const existing = await DailyReport.findOne({ date }).select('-_id -__v').lean();
+    return NextResponse.json(existing ?? null);
   } catch (err: unknown) {
     console.error('[GET /api/daily_report]', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  } finally {
-    await client.close();
   }
 }
 
-// ── POST — sync: fetch last 2 days from Hubstaff, store both ──
+// ── POST — sync last 2 days ────────────────────────────────────
 
 export async function POST(_req: NextRequest) {
-  const mongoUri = process.env.MONGO_URI!;
-  const mongoDb  = process.env.MONGO_DB!;
-  const dates    = lastNDays(2);
-
+  const dates = lastNDays(2);
   try {
     const docs = await Promise.all(dates.map(d => fetchAndBuildDoc(d)));
-    await Promise.all(docs.map(doc => upsertDoc(doc, mongoUri, mongoDb)));
-
-    // Return a map of date → doc so the UI can update whichever date is selected
+    await dbConnect();
+    await Promise.all(
+      docs.map(doc =>
+        DailyReport.updateOne(
+          { date: doc.date },
+          { $set: doc, $setOnInsert: { createdAt: new Date() } },
+          { upsert: true },
+        ),
+      ),
+    );
     const result = Object.fromEntries(docs.map(d => [d.date, d]));
     return NextResponse.json(result);
   } catch (err: unknown) {

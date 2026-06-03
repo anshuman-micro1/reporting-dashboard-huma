@@ -1,32 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
+import { getToken } from 'next-auth/jwt';
 
 const PUBLIC_PATHS = ['/login', '/api/auth'];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Allow public paths and static assets
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get('auth_token')?.value;
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
   if (!token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
-  try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
-    await jwtVerify(token, secret);
-    return NextResponse.next();
-  } catch {
-    const res = NextResponse.redirect(new URL('/login', req.url));
-    res.cookies.delete('auth_token');
-    return res;
+  // Admin-only: user management page and API
+  if (pathname.startsWith('/users') || pathname.startsWith('/api/users')) {
+    if (token.role !== 'admin') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
   }
+
+  // QC-only: allow admin, hdm, hdl
+  if (pathname.startsWith('/qc') || pathname.startsWith('/api/qc')) {
+    if (!(token.role === 'admin' || token.role === 'hdm' || token.role === 'hdl')) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif|.*\\.svg|.*\\.ico|.*\\.webp).*)',
+  ],
 };

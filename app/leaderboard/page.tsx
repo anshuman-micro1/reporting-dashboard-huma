@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DateRangePicker from '@/components/DateRangePicker';
+import LeaderboardTable from '../../components/leaderboard/LeaderboardTable';
+import { Button } from '../../components/ui/Button';
 
 interface LeaderboardRow {
   rank: number;
@@ -68,8 +70,8 @@ export default function LeaderboardPage() {
           Leaderboard
         </div>
         <div className="header-right">
-          <Link href="/" className="btn-secondary inv-nav-btn">
-            ← Dashboard
+          <Link href="/">
+            <Button variant="ghost">← Dashboard</Button>
           </Link>
         </div>
       </header>
@@ -98,48 +100,7 @@ export default function LeaderboardPage() {
           onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
         />
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 48, textAlign: 'center' }}>#</th>
-                <th>Expert</th>
-                <th>HDM</th>
-                <th style={{ textAlign: 'right', paddingRight: 20 }}>Total Hours</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr className="state-row">
-                  <td colSpan={4}>
-                    <span className="spinner" />Loading…
-                  </td>
-                </tr>
-              ) : loadError ? (
-                <tr className="state-row">
-                  <td colSpan={4} style={{ color: '#f87171' }}>Error: {loadError}</td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr className="state-row">
-                  <td colSpan={4}>No activity recorded in this date range</td>
-                </tr>
-              ) : (
-                rows.map(row => (
-                  <tr key={row.rank}>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-dim)' }}>
-                      {row.rank}
-                    </td>
-                    <td style={{ fontWeight: 600 }}>{row.memberName}</td>
-                    <td className="dim">{row.hdm || '—'}</td>
-                    <td className="time-cell" style={{ textAlign: 'right', paddingRight: 20 }}>
-                      {row.totalFormatted}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <LeaderboardTable rows={rows} loading={loading} loadError={loadError} />
       </main>
     </>
   );

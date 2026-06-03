@@ -1,48 +1,35 @@
 import axios from 'axios';
-import { MongoClient } from 'mongodb';
 import { getCachedCredentials, setCachedCredentials } from './credentials-cache';
+import { dbConnect } from './db';
+import { Settings } from './models/Settings';
+import { Member } from './models/Member';
+import { Report } from './models/Report';
 
 interface HubstaffCredentials {
-  HUBSTAFF_STRIPE_MID: string;
-  HUBSTAFF_XSRF_TOKEN: string;
-  HUBSTAFF_SESSION: string;
+  HUBSTAFF_STRIPE_MID:      string;
+  HUBSTAFF_XSRF_TOKEN:      string;
+  HUBSTAFF_SESSION:         string;
   HUBSTAFF_ACCOUNT_REFRESH: string;
-  HUBSTAFF_INGRESS_COOKIE: string;
-  HUBSTAFF_CSRF_TOKEN: string;
+  HUBSTAFF_INGRESS_COOKIE:  string;
+  HUBSTAFF_CSRF_TOKEN:      string;
 }
 
-async function loadCredentials(mongoUri: string, mongoDb: string): Promise<HubstaffCredentials> {
+async function loadCredentials(): Promise<HubstaffCredentials> {
   const cached = getCachedCredentials();
-  if (cached) {
-    return cached as unknown as HubstaffCredentials;
-  }
+  if (cached) return cached as unknown as HubstaffCredentials;
 
-  const client = new MongoClient(mongoUri);
-  try {
-    await client.connect();
-    const doc = await client.db(mongoDb).collection('settings').findOne({ _id: 'hubstaff_credentials' as never });
-    const creds: HubstaffCredentials = {
-      HUBSTAFF_STRIPE_MID:      (doc?.HUBSTAFF_STRIPE_MID      || process.env.HUBSTAFF_STRIPE_MID)      as string,
-      HUBSTAFF_XSRF_TOKEN:      (doc?.HUBSTAFF_XSRF_TOKEN      || process.env.HUBSTAFF_XSRF_TOKEN)      as string,
-      HUBSTAFF_SESSION:         (doc?.HUBSTAFF_SESSION         || process.env.HUBSTAFF_SESSION)         as string,
-      HUBSTAFF_ACCOUNT_REFRESH: (doc?.HUBSTAFF_ACCOUNT_REFRESH || process.env.HUBSTAFF_ACCOUNT_REFRESH) as string,
-      HUBSTAFF_INGRESS_COOKIE:  (doc?.HUBSTAFF_INGRESS_COOKIE  || process.env.HUBSTAFF_INGRESS_COOKIE)  as string,
-      HUBSTAFF_CSRF_TOKEN:      (doc?.HUBSTAFF_CSRF_TOKEN      || process.env.HUBSTAFF_CSRF_TOKEN)      as string,
-    };
-    setCachedCredentials(creds as unknown as Record<string, string>);
-    return creds;
-  } finally {
-    await client.close();
-  }
-}
-
-interface MemberDoc {
-  hubstaffId: number;
-  hubstaffName: string;
-  personalEmail: string;
-  micro1Email: string;
-  hdm: string | null;
-  team: string | null;
+  await dbConnect();
+  const doc = await Settings.findById('hubstaff_credentials').lean();
+  const creds: HubstaffCredentials = {
+    HUBSTAFF_STRIPE_MID:      (doc?.HUBSTAFF_STRIPE_MID      || process.env.HUBSTAFF_STRIPE_MID)      as string,
+    HUBSTAFF_XSRF_TOKEN:      (doc?.HUBSTAFF_XSRF_TOKEN      || process.env.HUBSTAFF_XSRF_TOKEN)      as string,
+    HUBSTAFF_SESSION:         (doc?.HUBSTAFF_SESSION         || process.env.HUBSTAFF_SESSION)         as string,
+    HUBSTAFF_ACCOUNT_REFRESH: (doc?.HUBSTAFF_ACCOUNT_REFRESH || process.env.HUBSTAFF_ACCOUNT_REFRESH) as string,
+    HUBSTAFF_INGRESS_COOKIE:  (doc?.HUBSTAFF_INGRESS_COOKIE  || process.env.HUBSTAFF_INGRESS_COOKIE)  as string,
+    HUBSTAFF_CSRF_TOKEN:      (doc?.HUBSTAFF_CSRF_TOKEN      || process.env.HUBSTAFF_CSRF_TOKEN)      as string,
+  };
+  setCachedCredentials(creds as unknown as Record<string, string>);
+  return creds;
 }
 
 interface MemberEntry {
@@ -54,63 +41,54 @@ interface MemberEntry {
 }
 
 interface MemberLookup {
-  byName: Map<string, MemberEntry>;
+  byName:  Map<string, MemberEntry>;
   byEmail: Map<string, MemberEntry>;
 }
 
 interface MappedMember {
-  organization: string;
-  timezone: string;
+  organization:  string;
+  timezone:      string;
   personalEmail: string | null;
-  micro1Email: string | null;
-  hdm: string | null;
-  team: string | null;
-  totalWorked: string;
-  activity: string;
-  spentTotal: string;
-  currency: string;
-  dates: Record<string, string>;
+  micro1Email:   string | null;
+  hdm:           string | null;
+  team:          string | null;
+  totalWorked:   string;
+  activity:      string;
+  spentTotal:    string;
+  currency:      string;
+  dates:         Record<string, string>;
 }
 
 const REPORT_FILTERS: Record<string, string> = {
-  show_email: 'true',
-  show_job_title: 'true',
-  show_job_type: 'true',
-  show_employee_id: 'true',
-  show_tax_info: 'true',
-  show_location: 'true',
-  show_timezone: 'true',
-  show_date_added: 'true',
-  show_spent: 'true',
-  show_activity: 'true',
-  show_manual: 'true',
-  show_break_time: 'true',
-  include_archived: 'true',
+  show_email:          'true',
+  show_job_title:      'true',
+  show_job_type:       'true',
+  show_employee_id:    'true',
+  show_tax_info:       'true',
+  show_location:       'true',
+  show_timezone:       'true',
+  show_date_added:     'true',
+  show_spent:          'true',
+  show_activity:       'true',
+  show_manual:         'true',
+  show_break_time:     'true',
+  include_archived:    'true',
 };
 
-async function loadMembersFromDB(
-  mongoUri: string,
-  mongoDb: string,
-): Promise<MemberEntry[]> {
-  const client = new MongoClient(mongoUri);
-  try {
-    await client.connect();
-    const docs = (await client
-      .db(mongoDb)
-      .collection('members')
-      .find({}, { projection: { hubstaffId: 1, hubstaffName: 1, personalEmail: 1, micro1Email: 1, hdm: 1, team: 1, _id: 0 } })
-      .toArray()) as unknown as MemberDoc[];
+async function loadMembersFromDB(): Promise<MemberEntry[]> {
+  await dbConnect();
+  const docs = await Member.find(
+    {},
+    { hubstaffName: 1, personalEmail: 1, micro1Email: 1, hdm: 1, team: 1 },
+  ).lean();
 
-    return docs.map(d => ({
-      name: d.hubstaffName,
-      personalEmail: d.personalEmail,
-      micro1Email: d.micro1Email,
-      hdm: d.hdm ?? null,
-      team: d.team ?? null,
-    }));
-  } finally {
-    await client.close();
-  }
+  return docs.map(d => ({
+    name:          d.hubstaffName,
+    personalEmail: d.personalEmail ?? '',
+    micro1Email:   d.micro1Email   ?? '',
+    hdm:           d.hdm  ?? null,
+    team:          d.team ?? null,
+  }));
 }
 
 function buildRequestHeaders(orgId: string, creds: HubstaffCredentials): Record<string, string> {
@@ -134,19 +112,16 @@ function buildRequestHeaders(orgId: string, creds: HubstaffCredentials): Record<
 }
 
 function buildReportUrl(orgId: string, projectId: string, dateStart: string, dateEnd: string): string {
-  const base = `https://app.hubstaff.com/reports/${orgId}/team/daily.csv`;
+  const base   = `https://app.hubstaff.com/reports/${orgId}/team/daily.csv`;
   const params = new URLSearchParams();
-  params.append('date', dateStart);
+  params.append('date',     dateStart);
   params.append('date_end', dateEnd);
   params.append('group_by', 'date');
-
   for (const [key, value] of Object.entries(REPORT_FILTERS)) {
     params.append(`filters[${key}]`, value);
   }
-
   params.append('filters[organization_id]', orgId);
   params.append('filters[projects][]', projectId);
-
   return `${base}?${params.toString()}`;
 }
 
@@ -168,35 +143,24 @@ async function fetchUrl(url: string, headers: Record<string, string>): Promise<s
 function parseCsv(csvText: string): Record<string, string>[] {
   function tokeniseRow(line: string): string[] {
     const fields: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
+    let current = '', inQuotes = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
+        if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+        else inQuotes = !inQuotes;
       } else if (ch === ',' && !inQuotes) {
-        fields.push(current.trim());
-        current = '';
+        fields.push(current.trim()); current = '';
       } else {
         current += ch;
       }
     }
-
     fields.push(current.trim());
     return fields;
   }
-
   const lines = csvText.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lines.length < 2) return [];
-
   const headers = tokeniseRow(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_'));
-
   return lines.slice(1).map(line => {
     const values = tokeniseRow(line);
     return headers.reduce((obj: Record<string, string>, header, i) => {
@@ -211,16 +175,12 @@ function isDateColumn(header: string): boolean {
 }
 
 function buildMemberLookup(memberDirectory: MemberEntry[]): MemberLookup {
-  const byName = new Map<string, MemberEntry>();
+  const byName  = new Map<string, MemberEntry>();
   const byEmail = new Map<string, MemberEntry>();
-
   for (const entry of memberDirectory) {
     byName.set(entry.name.toLowerCase().trim(), entry);
-    if (entry.personalEmail) {
-      byEmail.set(entry.personalEmail.toLowerCase().trim(), entry);
-    }
+    if (entry.personalEmail) byEmail.set(entry.personalEmail.toLowerCase().trim(), entry);
   }
-
   return { byName, byEmail };
 }
 
@@ -238,13 +198,11 @@ function mapByMemberAndDate(
 
   for (const row of rows) {
     const member = row['member'];
-    if (!member || member.trim() === '') continue;
+    if (!member?.trim()) continue;
 
     const dates: Record<string, string> = {};
     for (const [key, value] of Object.entries(row)) {
-      if (isDateColumn(key)) {
-        dates[key] = value || '0:00:00';
-      }
+      if (isDateColumn(key)) dates[key] = value || '0:00:00';
     }
 
     const dir = resolveMember(member, lookup);
@@ -252,16 +210,16 @@ function mapByMemberAndDate(
 
     const key = dir ? dir.name : member;
     result[key] = {
-      organization: row['organization'] || '',
-      timezone: row['time_zone'] || '',
+      organization:  row['organization'] || '',
+      timezone:      row['time_zone']    || '',
       personalEmail: dir ? dir.personalEmail : null,
-      micro1Email: dir ? dir.micro1Email : null,
-      hdm: dir ? dir.hdm : null,
-      team: dir ? dir.team : null,
-      totalWorked: row['total_worked'] || '',
-      activity: row['activity'] || '',
-      spentTotal: row['spent_total'] || '',
-      currency: row['currency'] || '',
+      micro1Email:   dir ? dir.micro1Email   : null,
+      hdm:           dir ? dir.hdm           : null,
+      team:          dir ? dir.team          : null,
+      totalWorked:   row['total_worked'] || '',
+      activity:      row['activity']     || '',
+      spentTotal:    row['spent_total']  || '',
+      currency:      row['currency']     || '',
       dates,
     };
   }
@@ -275,69 +233,54 @@ function mapByMemberAndDate(
 }
 
 async function storeToMongoDB(
-  mapped: Record<string, MappedMember>,
-  mongoUri: string,
-  mongoDb: string,
-  mongoCollection: string,
-  orgId: string,
+  mapped:    Record<string, MappedMember>,
+  orgId:     string,
   projectId: string,
 ): Promise<void> {
-  const client = new MongoClient(mongoUri);
+  await dbConnect();
 
-  try {
-    await client.connect();
-    const collection = client.db(mongoDb).collection(mongoCollection);
-
-    const ops = Object.entries(mapped).map(([memberName, data]) => {
-      const { dates, totalWorked, ...rest } = data;
-
-      const dateFields = Object.fromEntries(
-        Object.entries(dates).map(([d, v]) => [`dates.${d}`, v]),
-      );
-
-      return {
-        updateOne: {
-          filter: { memberName },
-          update: {
-            $set: {
-              orgId,
-              projectId,
-              memberName,
-              ...rest,
-              ...dateFields,
-              updatedAt: new Date(),
-            },
-            $setOnInsert: { createdAt: new Date() },
-          },
-          upsert: true,
-        },
-      };
-    });
-
-    const result = await collection.bulkWrite(ops, { ordered: false });
-    console.log(
-      `✅  MongoDB: ${result.upsertedCount} inserted, ${result.modifiedCount} updated (${mongoDb}.${mongoCollection})`,
+  const ops = Object.entries(mapped).map(([memberName, data]) => {
+    const { dates, totalWorked, ...rest } = data;
+    const dateFields = Object.fromEntries(
+      Object.entries(dates).map(([d, v]) => [`dates.${d}`, v]),
     );
-  } finally {
-    await client.close();
-  }
+    return {
+      updateOne: {
+        filter: { memberName },
+        update: {
+          $set: {
+            orgId,
+            projectId,
+            memberName,
+            ...rest,
+            ...dateFields,
+            updatedAt: new Date(),
+          },
+          $setOnInsert: { createdAt: new Date() },
+        },
+        upsert: true,
+      },
+    };
+  });
+
+  const result = await Report.bulkWrite(ops, { ordered: false });
+  console.log(
+    `✅  MongoDB: ${result.upsertedCount} inserted, ${result.modifiedCount} updated (reports)`,
+  );
 }
 
 export async function runReport(dateStart?: string, dateEnd?: string): Promise<void> {
-  const orgId = process.env.HUBSTAFF_ORG_ID!;
-  const projectId = process.env.HUBSTAFF_PROJECT_ID!;
+  const orgId              = process.env.HUBSTAFF_ORG_ID!;
+  const projectId          = process.env.HUBSTAFF_PROJECT_ID!;
   const effectiveDateStart = dateStart || process.env.REPORT_DATE_START!;
-  const effectiveDateEnd = dateEnd || process.env.REPORT_DATE_END!;
-  const mongoUri = process.env.MONGO_URI!;
-  const mongoDb = process.env.MONGO_DB!;
-  const mongoCollection = process.env.MONGO_COLLECTION!;
+  const effectiveDateEnd   = dateEnd   || process.env.REPORT_DATE_END!;
 
   console.log('Loading credentials from MongoDB…');
-  const creds = await loadCredentials(mongoUri, mongoDb);
+  const creds          = await loadCredentials();
   const requestHeaders = buildRequestHeaders(orgId, creds);
 
   console.log('Loading members from MongoDB…');
-  const memberDirectory = await loadMembersFromDB(mongoUri, mongoDb);
+  const memberDirectory = await loadMembersFromDB();
   console.log(`Loaded ${memberDirectory.length} members from DB.`);
 
   console.log('Building report URL…');
@@ -348,7 +291,6 @@ export async function runReport(dateStart?: string, dateEnd?: string): Promise<v
 
   console.log(`Received ${csvText.length} characters. Parsing CSV…`);
   const rows = parseCsv(csvText);
-
   if (rows.length === 0) {
     throw new Error('No data rows found. Check your date range, cookies, or filters.');
   }
@@ -358,5 +300,5 @@ export async function runReport(dateStart?: string, dateEnd?: string): Promise<v
   const mapped = mapByMemberAndDate(rows, lookup);
 
   console.log('Storing to MongoDB…');
-  await storeToMongoDB(mapped, mongoUri, mongoDb, mongoCollection, orgId, projectId);
+  await storeToMongoDB(mapped, orgId, projectId);
 }
