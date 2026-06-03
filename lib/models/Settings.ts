@@ -1,6 +1,6 @@
-import mongoose, { Schema, Model, Document } from 'mongoose';
+import mongoose, { Schema, Model } from 'mongoose';
 
-export interface ISettings extends Document {
+export interface ISettings {
   _id: string;
   HUBSTAFF_STRIPE_MID?: string;
   HUBSTAFF_XSRF_TOKEN?: string;

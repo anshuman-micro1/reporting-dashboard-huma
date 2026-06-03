@@ -31,7 +31,7 @@ export const authOptions: NextAuthOptions = {
           id:    user._id.toString(),
           email: user.email,
           name:  user.name,
-          role:  user.role,
+          role:  user.role as any,
         };
       },
     }),
@@ -56,11 +56,11 @@ export const authOptions: NextAuthOptions = {
           // Fetch role from DB for Google sign-ins
           await dbConnect();
           const dbUser = await User.findOne({ email: token.email! }).lean();
-          token.role = dbUser?.role ?? 'user';
+          token.role = (dbUser?.role ?? 'user') as any;
           token.id   = dbUser?._id.toString() ?? '';
         } else {
           // Credentials: role is set in authorize()
-          token.role = user.role;
+          token.role = user.role as any;
           token.id   = user.id;
         }
       }
@@ -70,7 +70,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id   = token.id;
-        session.user.role = token.role;
+        session.user.role = token.role as any;
       }
       return session;
     },

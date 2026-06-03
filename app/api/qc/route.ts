@@ -120,8 +120,7 @@ export async function POST(req: NextRequest) {
 
     if (ops.length === 0) return NextResponse.json({ ok: true, inserted: 0, rejected: invalidRows.length, errors: invalidRows.slice(0, 10) });
     const result = await QCSubmission.bulkWrite(ops, { ordered: false });
-    // result.upsertedCount is not always present depending on driver version — build a friendly summary
-    const upserted = (result.upsertedCount ?? result.upserted) ?? 0;
+    const upserted = result.upsertedCount ?? 0;
     const modified = result.modifiedCount ?? 0;
     return NextResponse.json({ ok: true, result: { upserted, modified }, rejected: invalidRows.length, errors: invalidRows.slice(0, 20) });
   } catch (err: unknown) {
