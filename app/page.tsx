@@ -124,7 +124,7 @@ export default function Dashboard() {
   const [dailyReportLoading, setDailyReportLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'name' | 'activity' | 'tasks' | 'total' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [huma2Filter, setHuma2Filter] = useState(false);
+  const [huma2Filter, setHuma2Filter] = useState(true);
   const [selectedHDM, setSelectedHDM] = useState('');
   const [minTasks, setMinTasks] = useState(0);
   const [maxTasks, setMaxTasks] = useState(0);
@@ -225,7 +225,9 @@ export default function Dashboard() {
   const handleSearchChange = (value: string) => {
     setSearch(value);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => refresh(value), 280);
+    if (value.length >= 4 || value.length === 0) {
+      searchDebounceRef.current = setTimeout(() => refresh(value), 300);
+    }
   };
 
   const scrollToMember = (memberName: string) => {
@@ -449,6 +451,14 @@ export default function Dashboard() {
   const statRange = visDateCols.length ? `${visDateCols[0]} → ${visDateCols[visDateCols.length - 1]}` : '—';
   const statOrg = allRows[0]?.organization || '—';
 
+  const DISPLAY_DAYS = 7;
+  const displayedDateCols = visDateCols.slice(-DISPLAY_DAYS);
+  const hasMoreCols = visDateCols.length > DISPLAY_DAYS;
+  const moreCount = visDateCols.length - DISPLAY_DAYS;
+  const timeTracksHref = visDateCols.length
+    ? `/time-tracks?from=${encodeURIComponent(visDateCols[0])}&to=${encodeURIComponent(visDateCols[visDateCols.length - 1])}`
+    : '/time-tracks';
+
 
   return (
     <>
@@ -481,11 +491,7 @@ export default function Dashboard() {
             Leaderboard
           </Link>
           <button id="fetch-btn" onClick={() => { setFetchError(''); setModalOpen(true); }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
+            <img src="/icons8-hubstaff-240.png" width="16" height="16" alt="" style={{ borderRadius: 3 }} />
             Fetch Data
           </button>
           <button
@@ -568,7 +574,7 @@ export default function Dashboard() {
             </svg>
             <input
               type="text"
-              placeholder="Search name, personal email, micro1 email…"
+              placeholder="Search name, personal email, micro1 email (min 4 chars)…"
               value={search}
               onChange={e => handleSearchChange(e.target.value)}
             />
@@ -654,8 +660,9 @@ export default function Dashboard() {
               <button
                 className="btn-secondary"
                 onClick={e => { e.stopPropagation(); exportZeroCSV(); }}
-                style={{ fontSize: 12, padding: '4px 10px', marginRight: 4 }}
+                style={{ fontSize: 12, padding: '4px 10px', marginRight: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
+                <img src="/icons8-excel-240.png" width="14" height="14" alt="" style={{ borderRadius: 2 }} />
                 Export CSV
               </button>
               <div className={`zero-chevron${zeroPanelOpen ? ' open' : ''}`}>▼</div>
@@ -792,31 +799,44 @@ export default function Dashboard() {
         )}
 
         {/* Table */}
+        {!loading && hasMoreCols && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+              Showing last 7 days ·{' '}
+            </span>
+            <Link
+              href={timeTracksHref}
+              style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', marginLeft: 4 }}
+            >
+              View all {visDateCols.length} days →
+            </Link>
+          </div>
+        )}
         <div className="table-wrap" ref={tableWrapRef}>
           <table>
             <thead ref={tableHeadRef}>
               <tr>
                 <th className="col-name th-sortable" onClick={() => handleSort('name')}>
                   Expert
-                  <span className="sort-icon">{sortCol === 'name' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+                  <span className={`sort-icon${sortCol === 'name' ? ' active' : ''}`}>{sortCol === 'name' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="col-pemail">Personal Email</th>
                 <th className="col-memail">Micro1 Email</th>
                 <th className="col-hdm">HDM</th>
                 <th className="col-tasks th-sortable" onClick={() => handleSort('tasks')}>
                   Tasks
-                  <span className="sort-icon">{sortCol === 'tasks' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+                  <span className={`sort-icon${sortCol === 'tasks' ? ' active' : ''}`}>{sortCol === 'tasks' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="col-activity th-sortable" onClick={() => handleSort('activity')}>
                   Activity
-                  <span className="sort-icon">{sortCol === 'activity' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+                  <span className={`sort-icon${sortCol === 'activity' ? ' active' : ''}`}>{sortCol === 'activity' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className={`col-total th-total th-sortable${rangeActive ? ' filtered' : ''}`} onClick={() => handleSort('total')}>
                   {rangeActive ? 'Range Total' : 'Total'}
-                  <span className="sort-icon">{sortCol === 'total' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
+                  <span className={`sort-icon${sortCol === 'total' ? ' active' : ''}`}>{sortCol === 'total' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="col-actions"></th>
-                {[...visDateCols].reverse().map(d => {
+                {[...displayedDateCols].reverse().map(d => {
                   const dt = new Date(d + 'T00:00:00');
                   return (
                     <th key={d} className="date-th" title={d}>
@@ -825,24 +845,34 @@ export default function Dashboard() {
                     </th>
                   );
                 })}
+                {hasMoreCols && (
+                  <th key="__more" className="date-th">
+                    <Link
+                      href={timeTracksHref}
+                      style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                    >
+                      +{moreCount} more →
+                    </Link>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody ref={tableBodyRef}>
               {loading ? (
                 <tr className="state-row">
-                  <td colSpan={8 + visDateCols.length}>
+                  <td colSpan={8 + displayedDateCols.length + (hasMoreCols ? 1 : 0)}>
                     <span className="spinner" />Loading…
                   </td>
                 </tr>
               ) : loadError ? (
                 <tr className="state-row">
-                  <td colSpan={8 + visDateCols.length} style={{ color: '#f87171' }}>
+                  <td colSpan={8 + displayedDateCols.length + (hasMoreCols ? 1 : 0)} style={{ color: '#f87171' }}>
                     Error: {loadError}
                   </td>
                 </tr>
               ) : allRows.length === 0 ? (
                 <tr className="state-row">
-                  <td colSpan={8 + visDateCols.length}>No records found</td>
+                  <td colSpan={8 + displayedDateCols.length + (hasMoreCols ? 1 : 0)}>No records found</td>
                 </tr>
               ) : (
                 sortedRows.map(row => {
@@ -896,7 +926,7 @@ export default function Dashboard() {
                           {isOffboarding ? 'Offboarding' : isOffboarded ? 'Offboarded' : 'Offboard'}
                         </button>
                       </td>
-                      {[...visDateCols].reverse().map(d => {
+                      {[...displayedDateCols].reverse().map(d => {
                         const val = row.dates?.[d] || '0:00:00';
                         return (
                           <td key={d} className={val === '0:00:00' ? 'time-cell zero-time' : 'time-cell'}>
@@ -904,6 +934,9 @@ export default function Dashboard() {
                           </td>
                         );
                       })}
+                      {hasMoreCols && (
+                        <td key="__more" className="time-cell" style={{ textAlign: 'center', opacity: 0.4 }}>—</td>
+                      )}
                     </tr>
                   );
                 })
@@ -920,7 +953,10 @@ export default function Dashboard() {
           onClick={e => { if (e.target === e.currentTarget) setModalOpen(false); }}
         >
           <div className="modal">
-            <div className="modal-title">Fetch Data from Hubstaff</div>
+            <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <img src="/icons8-hubstaff-240.png" width="22" height="22" alt="" style={{ borderRadius: 4 }} />
+              Fetch Data from Hubstaff
+            </div>
 
             {!fetchLoading && (
               <>
