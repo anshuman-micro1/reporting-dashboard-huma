@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useSession, signOut } from 'next-auth/react';
 
 interface QCTask {
   link: string;
@@ -87,6 +88,9 @@ const YESTERDAY = (() => { const d = new Date(); d.setDate(d.getDate() - 1); ret
 
 
 export default function Dashboard() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === 'admin';
+
   const [allRows, setAllRows] = useState<ReportRow[]>([]);
   const [allDateCols, setAllDateCols] = useState<string[]>([]);
   const [masterDateCols, setMasterDateCols] = useState<string[]>([]);
@@ -475,6 +479,11 @@ export default function Dashboard() {
           Hubstaff Dashboard
         </div>
         <div className="header-right">
+          {isAdmin && (
+            <Link href="/users" className="btn-secondary inv-nav-btn">
+              Users
+            </Link>
+          )}
           <Link href="/settings" className="btn-secondary inv-nav-btn">
             Settings
           </Link>
@@ -496,10 +505,7 @@ export default function Dashboard() {
           </button>
           <button
             className="btn-secondary"
-            onClick={async () => {
-              await fetch('/api/auth', { method: 'DELETE' });
-              window.location.href = '/login';
-            }}
+            onClick={() => signOut({ callbackUrl: '/login' })}
           >
             Sign out
           </button>
