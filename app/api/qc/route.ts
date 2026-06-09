@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db';
 import { QCSubmission } from '@/lib/models/QCSubmission';
+import { buildQCUpsertOps, normalizeQCSourceRows } from '@/lib/qc-import';
 
 // GET: list recent QC submissions (query params: search, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -56,67 +57,8 @@ export async function POST(req: NextRequest) {
     }
 
     await dbConnect();
-    // Validate and normalize rows before building bulk ops.
-    const invalidRows: Array<{ index: number; reason: string; row: Record<string, any> }> = [];
-    const validDocs: any[] = [];
-
-    function isEmail(s: any) {
-      if (!s) return false;
-      return /\S+@\S+\.\S+/.test(String(s));
-    }
-
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i] as Record<string, any>;
-      const doc: any = {
-        date: r.date || r.Date || r['Date'] || r['Date 🤖'] || r['date 🤖'] || r['Date\t'] || '',
-        expertName: r.expertName || r['Expert Name'] || r['Expert Name🤖'] || r['expert_name'] || r['Expert Name '] || '',
-        personalEmail: r.personalEmail || r['Personal Email'] || r['Personal Email🤖'] || r['personal_email'] || null,
-        expertEmail: r.expertEmail || r['Expert Email'] || r['Expert Email 🤖'] || r['expert_email'] || null,
-        assignedHDM: r.assignedHDM || r['Assigned HDM'] || r['Assigned HDM🤖'] || r['assigned_hdm'] || null,
-        featherLink: r.featherLink || r['Feather Link'] || r['Feather Link🤖'] || r['feather_link'] || null,
-        recordingLength: r.recordingLength || r['Recording Length'] || r['Recording Length🤖'] || r['recording_length'] || null,
-        app: r.app || r['App'] || r['App🤖'] || null,
-        reviewerName: r.reviewerName || r['Reviewer Name'] || r['Reviewer Name✏️ <-DO NOT edit A-H!!!'] || null,
-        tagStatus: r.tagStatus || r['Tag Status'] || null,
-        notes: r.notes || r['Complete Description'] || null,
-        raw: r,
-        updatedAt: new Date(),
-      };
-
-      // Basic validation: require date and either expertEmail or expertName
-      if (!doc.date) {
-        invalidRows.push({ index: i, reason: 'missing date', row: r });
-        continue;
-      }
-
-      const parsed = new Date(String(doc.date));
-      if (isNaN(parsed.getTime())) {
-        invalidRows.push({ index: i, reason: `invalid date: ${doc.date}`, row: r });
-        continue;
-      }
-      // normalize to YYYY-MM-DD
-      doc.date = parsed.toISOString().slice(0, 10);
-
-      if (!doc.expertEmail && !doc.expertName) {
-        invalidRows.push({ index: i, reason: 'missing expertEmail and expertName', row: r });
-        continue;
-      }
-
-      if (doc.expertEmail && !isEmail(doc.expertEmail)) {
-        invalidRows.push({ index: i, reason: `invalid expertEmail: ${doc.expertEmail}`, row: r });
-        continue;
-      }
-
-      validDocs.push(doc);
-    }
-
-    const ops = validDocs.map((doc: any) => ({
-      updateOne: {
-        filter: { expertEmail: doc.expertEmail || doc.expertName, date: doc.date },
-        update: { $set: doc, $setOnInsert: { createdAt: new Date() } },
-        upsert: true,
-      },
-    }));
+    const { docs, invalidRows } = normalizeQCSourceRows(rows);
+    const ops = buildQCUpsertOps(docs);
 
     if (ops.length === 0) return NextResponse.json({ ok: true, inserted: 0, rejected: invalidRows.length, errors: invalidRows.slice(0, 10) });
     const result = await QCSubmission.bulkWrite(ops, { ordered: false });
