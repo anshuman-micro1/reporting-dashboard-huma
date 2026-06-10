@@ -24,6 +24,13 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // Excel upload is admin-only
+  if (pathname.startsWith('/api/qc/upload')) {
+    if (token.role !== 'admin') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
   // QC-only: allow admin, hdm, hdl
   if (pathname.startsWith('/qc') || pathname.startsWith('/api/qc')) {
     if (!(token.role === 'admin' || token.role === 'hdm' || token.role === 'hdl')) {

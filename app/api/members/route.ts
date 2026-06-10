@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
+import Fuse from 'fuse.js';
 import { dbConnect } from '@/lib/db';
 import { Member } from '@/lib/models/Member';
+
+const FUZZY_THRESHOLD = 0.35;
 
 interface CsvRow {
   name: string;
@@ -42,20 +45,23 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { id, personalEmail, micro1Email, hdm, team } = await req.json();
+  const body = await req.json();
+  const { id } = body;
   if (!id) return NextResponse.json({ error: 'No id provided' }, { status: 400 });
 
   try {
     await dbConnect();
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if ('personalEmail' in body) update.personalEmail = body.personalEmail || null;
+    if ('micro1Email'   in body) update.micro1Email   = body.micro1Email   || null;
+    if ('hdm'          in body) update.hdm           = body.hdm           || null;
+    if ('team'         in body) update.team          = body.team          || null;
+    if ('hubstaffId'   in body) update.hubstaffId    = body.hubstaffId;
+    if ('hubstaffName' in body) update.hubstaffName  = body.hubstaffName;
+
     const result = await Member.updateOne(
       { _id: new mongoose.Types.ObjectId(id as string) },
-      { $set: {
-        personalEmail: personalEmail || null,
-        micro1Email:   micro1Email   || null,
-        hdm:           hdm           || null,
-        team:          team          || null,
-        updatedAt:     new Date(),
-      }},
+      { $set: update },
     );
     if (result.matchedCount === 0) {
       return NextResponse.json({ error: 'Expert not found' }, { status: 404 });
@@ -74,7 +80,18 @@ export async function POST(req: NextRequest) {
 
   try {
     await dbConnect();
-    const notFound: string[] = [];
+
+    // Load all members once for fuzzy matching
+    const allMembers = await Member.find({}, { hubstaffName: 1 }).lean();
+    const fuse = new Fuse(allMembers, {
+      keys:           ['hubstaffName'],
+      includeScore:   true,
+      threshold:      FUZZY_THRESHOLD,
+      ignoreLocation: true,
+    });
+
+    const notFound:     string[]                              = [];
+    const fuzzyMatched: { csvName: string; matchedTo: string }[] = [];
     let updated = 0;
 
     for (const row of rows) {
@@ -112,6 +129,21 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Fallback 3: fuzzy match on hubstaffName
+      if (result.matchedCount === 0) {
+        const hits = fuse.search(name);
+        if (hits.length > 0 && (hits[0].score ?? 1) <= FUZZY_THRESHOLD) {
+          const best = hits[0].item;
+          result = await Member.updateOne(
+            { _id: (best._id as mongoose.Types.ObjectId) },
+            { $set: setFields },
+          );
+          if (result.matchedCount > 0) {
+            fuzzyMatched.push({ csvName: name, matchedTo: best.hubstaffName });
+          }
+        }
+      }
+
       if (result.matchedCount === 0) {
         notFound.push(name);
       } else {
@@ -119,7 +151,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ updated, notFound });
+    return NextResponse.json({ updated, fuzzyMatched, notFound });
   } catch (err: unknown) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

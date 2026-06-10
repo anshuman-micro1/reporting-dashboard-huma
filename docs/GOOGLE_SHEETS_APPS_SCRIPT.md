@@ -1,77 +1,49 @@
-# Google Sheets → QC API (Apps Script)
+# Google Sheets runner and Excel upload
 
-This file explains how to install the provided Apps Script which will push Google Sheet rows to your app's `/api/qc` endpoint.
+This repository supports two QC ingestion paths:
 
-Files added to this repo:
-- `tools/google_apps_script/qc_push.gs` — the Apps Script code to copy into Apps Script editor.
+- Apps Script runner from Google Sheets, which pushes rows to `POST /api/qc`.
+- Admin-only Excel / CSV upload from the QC dashboard, which sends a file to `POST /api/qc/upload`.
 
-Quick steps
+Apps Script setup
 
-1. Open your Google Sheet.
+1. Open the Google Sheet that should act as the source of truth.
 2. Extensions → Apps Script.
-3. In the Apps Script editor, create a new script file and paste the contents of `tools/google_apps_script/qc_push.gs` from this repository.
-4. Update constants at the top:
-   - `QC_API_URL` — full URL to your app's `/api/qc` endpoint (e.g. `https://app.example.com/api/qc`).
-   - `QC_API_KEY` — optional secret you can set to a value also checked by your server.
-   - `SHEET_NAME` — sheet tab name containing the QC data.
-   - `HEADER_ROW` — header row index (usually `1`).
+3. Create a new script file and paste the contents of `tools/google_apps_script/qc_push.gs`.
+4. Update the constants at the top:
+   - `QC_API_URL` - your app endpoint, for example `https://app.example.com/api/qc`
+   - `QC_API_KEY` - optional shared secret, must match your server env if set
+   - `SHEET_NAME` - tab name to push from when using `pushAllRows()`
+   - `HEADER_ROW` - usually `1`
 5. Save the script.
 
-Authorize + test
+Run and authorize
 
-1. Run `testPush()` from the Apps Script editor to grant permissions and run an initial push. Accept the auth scopes prompted by Google.
-2. In the script editor, View → Logs to inspect results.
+1. Run `testPush()` once from the Apps Script editor.
+2. Accept the requested permissions.
+3. Use View → Logs to confirm the response.
 
-Install an edit trigger (recommended for near-real-time pushes)
+Trigger options
 
-1. Click the clock icon (Triggers) in the Apps Script editor.
-2. Add a trigger:
-   - Choose function: `onEdit`
-   - Event source: `From spreadsheet`
-   - Event type: `On edit`
-   - Failure notifications: as you prefer
-3. Save trigger. This creates an installable trigger which can call `UrlFetchApp`.
+- Use the custom menu added by `onOpen()` in the sheet UI.
+- Use `onEdit` as an installable trigger for near-real-time pushes.
+- Use `pushAllRows()` for a full refresh.
 
-Notes & security
+Important notes
 
-- Simple triggers cannot call `UrlFetchApp`; you must create an installable `onEdit` trigger as above.
-- For security, set `QC_API_KEY` in the script and validate it on the server (e.g., require `X-QC-Api-Key` header). The current server accepts posts without verification; consider implementing a check in `app/api/qc/route.ts` if you want stricter writes.
- - For security, set `QC_API_KEY` in the script and set the same value in your server environment as `QC_API_KEY`. The server will reject requests if the header does not match.
- - For security, set `QC_API_KEY` in the script and set the same value in your server environment as `QC_API_KEY`. The server will reject requests if the header does not match.
+- Simple triggers cannot call `UrlFetchApp`; use an installable `onEdit` trigger.
+- The script maps common header names like `Expert Name`, `Expert Email`, `Assigned HDM`, and `Complete Description` to the canonical QC fields.
+- If your sheet headers differ, edit `HEADER_MAP` in `tools/google_apps_script/qc_push.gs`.
+- Set `QC_API_KEY` in both the Apps Script and the server environment only if you want to require a shared secret.
 
-Environment file
+Excel upload for admins
 
-Add `QC_API_KEY` to your environment. See `.env.example` for an example. For local development you can copy `.env.example` to `.env.local` and edit values.
+- Admins can open `/qc` and upload an `.xlsx`, `.xls`, or `.csv` file.
+- The upload route reads the first sheet, normalizes rows, and stores them in `qc_submissions`.
+- Only users with the `admin` role can upload.
 
-Example:
+Server env
 
-```
-QC_API_KEY=your-strong-secret
-```
-- If your sheet is large, prefer scheduled `pushAllRows()` (time-driven trigger) or partial pushes instead of pushing the whole sheet on every edit.
+Add `QC_API_KEY` if you want Apps Script requests to require a shared secret. See `.env.example` for the expected variables.
 
-Header mapping and canonical keys
-
-- The provided Apps Script maps common header names to canonical keys the server expects. Example mappings:
-   - `Date` -> `date`
-   - `Expert Name` -> `expertName`
-   - `Personal Email` -> `personalEmail`
-   - `Expert Email` -> `expertEmail`
-   - `Assigned HDM` -> `assignedHDM`
-   - `Feather Link` -> `featherLink`
-   - `Recording Length` -> `recordingLength`
-   - `App` -> `app`
-   - `Reviewer Name` -> `reviewerName`
-   - `Tag Status` -> `tagStatus`
-   - `Complete Description` -> `notes`
-
-If your sheet uses different column names, edit `HEADER_MAP` in `tools/google_apps_script/qc_push.gs` to map them to these canonical keys.
-
-Example Apps Script behavior
-
-- `onEdit(e)`: pushes the single row that was edited (fast, minimal payload). Use installable trigger.
-- `pushAllRows()`: pushes entire sheet (good for first sync). Run manually or schedule time-driven trigger.
-
-If you want, I can:
-- Add server-side header/API key validation to `app/api/qc/route.ts`.
-- Modify the Apps Script to only push a subset of columns or to map headers to specific field names expected by the server.
+If you want, I can also add a small dropdown to choose the sheet tab during Excel upload.

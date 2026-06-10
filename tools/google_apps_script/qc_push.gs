@@ -1,5 +1,5 @@
 // QC Google Apps Script
-// Purpose: push Google Sheet rows (whole sheet or single edited row) to /api/qc
+// Purpose: push Google Sheet rows (whole sheet or single edited row) to /api/qc.
 // Usage: copy into Apps Script editor (Extensions → Apps Script) and set constants below.
 
 // --- CONFIG: set these before deploying ---
@@ -72,6 +72,15 @@ function pushRows(rows) {
   }
 }
 
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('QC Sync')
+    .addItem('Push active sheet', 'pushActiveSheetRows')
+    .addItem('Push named sheet', 'pushAllRows')
+    .addItem('Test push', 'testPush')
+    .addToUi();
+}
+
 /**
  * Push the entire sheet (all non-empty rows) to the QC API.
  * Good for initial sync or periodic full sync.
@@ -80,6 +89,16 @@ function pushAllRows() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) throw new Error('Sheet not found: ' + SHEET_NAME);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= HEADER_ROW) return { ok: true, pushed: 0 };
+  const headers = _headers(sheet);
+  const values = sheet.getRange(HEADER_ROW + 1, 1, lastRow - HEADER_ROW, headers.length).getValues();
+  const rows = values.map(r => _rowToObject(headers, r));
+  return pushRows(rows);
+}
+
+function pushActiveSheetRows() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const lastRow = sheet.getLastRow();
   if (lastRow <= HEADER_ROW) return { ok: true, pushed: 0 };
   const headers = _headers(sheet);

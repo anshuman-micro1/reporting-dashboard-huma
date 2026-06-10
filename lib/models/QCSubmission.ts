@@ -35,6 +35,8 @@ const QCSubmissionSchema = new Schema<IQCSubmission>({
 }, { versionKey: false, collection: 'qc_submissions' });
 
 QCSubmissionSchema.index({ expertEmail: 1, date: 1 });
+// Unique per recording — sparse so null featherLinks don't conflict with each other.
+QCSubmissionSchema.index({ featherLink: 1 }, { unique: true, sparse: true });
 
 export const QCSubmission: Model<IQCSubmission> =
   (mongoose.models.QCSubmission as Model<IQCSubmission>) ||
