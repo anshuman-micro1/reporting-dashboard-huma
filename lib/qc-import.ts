@@ -33,7 +33,7 @@ const FIELD_ALIASES: Record<keyof Omit<QCNormalizedRow, 'raw' | 'updatedAt'>, st
   app: ['app', 'App', 'App🤖'],
   reviewerName: ['reviewerName', 'Reviewer Name', 'Reviewer Name✏️ <-DO NOT edit A-H!!!', 'reviewer name'],
   tagStatus: ['tagStatus', 'Tag Status', 'tag status'],
-  notes: ['notes', 'Complete Description', 'complete description'],
+  notes: ['notes', 'Reviewer Notes', 'reviewer notes', 'Complete Description', 'complete description'],
 };
 
 function lowerKeyMap(row: QCInputRow) {
@@ -143,7 +143,12 @@ export function normalizeQCSourceRows(rows: QCInputRow[]) {
 export function buildQCUpsertOps(docs: QCNormalizedRow[]) {
   return docs.map(doc => ({
     updateOne: {
-      filter: { expertEmail: doc.expertEmail || doc.expertName, date: doc.date },
+      // featherLink is globally unique per recording — use it as the primary key when present.
+      // Fall back to expertEmail+date only for rows without a link (avoids collapsing multiple
+      // recordings on the same day into a single document).
+      filter: doc.featherLink
+        ? { featherLink: doc.featherLink }
+        : { expertEmail: doc.expertEmail || doc.expertName, date: doc.date },
       update: { $set: doc, $setOnInsert: { createdAt: new Date() } },
       upsert: true,
     },

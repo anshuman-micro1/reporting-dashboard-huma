@@ -1,9 +1,11 @@
 import axios from 'axios';
+import Fuse from 'fuse.js';
 import { getCachedCredentials, setCachedCredentials } from './credentials-cache';
 import { dbConnect } from './db';
 import { Settings } from './models/Settings';
 import { Member } from './models/Member';
 import { Report } from './models/Report';
+import { PendingMapping } from './models/PendingMapping';
 
 interface HubstaffCredentials {
   HUBSTAFF_STRIPE_MID:      string;
@@ -33,12 +35,23 @@ async function loadCredentials(): Promise<HubstaffCredentials> {
 }
 
 interface MemberEntry {
-  name: string;
+  id:            string;
+  name:          string;
   personalEmail: string;
-  micro1Email: string;
-  hdm: string | null;
-  team: string | null;
+  micro1Email:   string;
+  hdm:           string | null;
+  team:          string | null;
 }
+
+interface FuzzySuggestion {
+  hubstaffName:        string;
+  suggestedMemberName: string | null;
+  suggestedMemberId:   string | null;
+  score:               number | null;
+  autoApplied:         boolean;
+}
+
+const AUTO_APPLY_THRESHOLD = 0.3;
 
 interface MemberLookup {
   byName:  Map<string, MemberEntry>;
@@ -83,6 +96,7 @@ async function loadMembersFromDB(): Promise<MemberEntry[]> {
   ).lean();
 
   return docs.map(d => ({
+    id:            (d._id as { toString(): string }).toString(),
     name:          d.hubstaffName,
     personalEmail: d.personalEmail ?? '',
     micro1Email:   d.micro1Email   ?? '',
@@ -190,11 +204,19 @@ function resolveMember(member: string, lookup: MemberLookup): MemberEntry | null
 }
 
 function mapByMemberAndDate(
-  rows: Record<string, string>[],
-  lookup: MemberLookup,
-): Record<string, MappedMember> {
-  const result: Record<string, MappedMember> = {};
-  const unmatched: string[] = [];
+  rows:            Record<string, string>[],
+  lookup:          MemberLookup,
+  memberDirectory: MemberEntry[],
+): { mapped: Record<string, MappedMember>; suggestions: FuzzySuggestion[] } {
+  const mapped:      Record<string, MappedMember> = {};
+  const suggestions: FuzzySuggestion[]            = [];
+
+  const fuse = new Fuse(memberDirectory, {
+    keys:           ['name'],
+    includeScore:   true,
+    threshold:      0.6,
+    ignoreLocation: true,
+  });
 
   for (const row of rows) {
     const member = row['member'];
@@ -205,11 +227,38 @@ function mapByMemberAndDate(
       if (isDateColumn(key)) dates[key] = value || '0:00:00';
     }
 
-    const dir = resolveMember(member, lookup);
-    if (!dir) unmatched.push(member);
+    let dir         = resolveMember(member, lookup);
+    let autoApplied = false;
+
+    if (!dir) {
+      const results = fuse.search(member);
+      if (results.length > 0) {
+        const best  = results[0];
+        const score = best.score ?? 1;
+        if (score <= AUTO_APPLY_THRESHOLD) {
+          dir         = best.item;
+          autoApplied = true;
+        }
+        suggestions.push({
+          hubstaffName:        member,
+          suggestedMemberName: best.item.name,
+          suggestedMemberId:   best.item.id,
+          score,
+          autoApplied,
+        });
+      } else {
+        suggestions.push({
+          hubstaffName:        member,
+          suggestedMemberName: null,
+          suggestedMemberId:   null,
+          score:               null,
+          autoApplied:         false,
+        });
+      }
+    }
 
     const key = dir ? dir.name : member;
-    result[key] = {
+    mapped[key] = {
       organization:  row['organization'] || '',
       timezone:      row['time_zone']    || '',
       personalEmail: dir ? dir.personalEmail : null,
@@ -224,12 +273,40 @@ function mapByMemberAndDate(
     };
   }
 
-  if (unmatched.length > 0) {
-    console.warn(`\n⚠️  ${unmatched.length} member(s) not found in directory:`);
-    unmatched.forEach(m => console.warn(`   - ${m}`));
+  if (suggestions.length > 0) {
+    console.warn(`\n⚠️  ${suggestions.length} member(s) unmatched — queued for review:`);
+    suggestions.forEach(s => {
+      if (s.autoApplied) console.warn(`   ✓ "${s.hubstaffName}" → auto-applied as "${s.suggestedMemberName}" (score ${s.score?.toFixed(2)})`);
+      else if (s.suggestedMemberName) console.warn(`   ? "${s.hubstaffName}" → suggested "${s.suggestedMemberName}" (score ${s.score?.toFixed(2)})`);
+      else console.warn(`   ✗ "${s.hubstaffName}" → no suggestion`);
+    });
   }
 
-  return result;
+  return { mapped, suggestions };
+}
+
+async function savePendingSuggestions(suggestions: FuzzySuggestion[]): Promise<void> {
+  if (suggestions.length === 0) return;
+  await dbConnect();
+  const now = new Date();
+  const ops = suggestions.map(s => ({
+    updateOne: {
+      filter: { hubstaffName: s.hubstaffName },
+      update: {
+        $set: {
+          suggestedMemberName: s.suggestedMemberName,
+          suggestedMemberId:   s.suggestedMemberId,
+          score:               s.score,
+          autoApplied:         s.autoApplied,
+          lastSeen:            now,
+        },
+        $setOnInsert: { firstSeen: now },
+      },
+      upsert: true,
+    },
+  }));
+  await PendingMapping.bulkWrite(ops, { ordered: false });
+  console.log(`📋  ${suggestions.length} pending mapping(s) saved`);
 }
 
 async function storeToMongoDB(
@@ -297,8 +374,9 @@ export async function runReport(dateStart?: string, dateEnd?: string): Promise<v
 
   console.log(`Parsed ${rows.length} rows. Mapping…`);
   const lookup = buildMemberLookup(memberDirectory);
-  const mapped = mapByMemberAndDate(rows, lookup);
+  const { mapped, suggestions } = mapByMemberAndDate(rows, lookup, memberDirectory);
 
   console.log('Storing to MongoDB…');
   await storeToMongoDB(mapped, orgId, projectId);
+  await savePendingSuggestions(suggestions);
 }

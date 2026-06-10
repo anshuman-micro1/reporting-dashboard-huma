@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 import { getCachedCredentials, setCachedCredentials } from '@/lib/credentials-cache';
 import { dbConnect } from '@/lib/db';
@@ -119,6 +119,24 @@ async function upsertMembers(members: HubstaffMember[]): Promise<number> {
   );
 
   return result.upsertedCount;
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const members = await fetchAllMembers();
+    if (req.nextUrl.searchParams.get('format') === 'csv') {
+      const csv = 'id,name\n' + members.map(m => `${m.id},"${m.name.replace(/"/g, '""')}"`).join('\n');
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': 'attachment; filename="hubstaff-members.csv"',
+        },
+      });
+    }
+    return NextResponse.json(members);
+  } catch (err: unknown) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
 }
 
 export async function POST() {

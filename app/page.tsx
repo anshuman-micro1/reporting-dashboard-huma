@@ -499,6 +499,9 @@ export default function Dashboard() {
           <Link href="/leaderboard" className="btn-secondary inv-nav-btn">
             Leaderboard
           </Link>
+          <Link href="/qc" className="btn-secondary inv-nav-btn">
+            QC Dashboard
+          </Link>
           <button id="fetch-btn" onClick={() => { setFetchError(''); setModalOpen(true); }}>
             <img src="/icons8-hubstaff-240.png" width="16" height="16" alt="" style={{ borderRadius: 3 }} />
             Fetch Data
