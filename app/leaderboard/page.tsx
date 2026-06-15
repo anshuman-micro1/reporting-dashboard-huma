@@ -12,6 +12,7 @@ interface LeaderboardRow {
   hdm: string | null;
   totalSeconds: number;
   totalFormatted: string;
+  taskCount: number;
 }
 
 function defaultDateRange(): { from: string; to: string } {

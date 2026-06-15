@@ -79,11 +79,38 @@ export async function GET(req: NextRequest) {
       { $sort:  { totalSeconds: -1 } },
       { $limit: 10 },
       {
+        $lookup: {
+          from: 'qc_submissions',
+          let:  { pe: '$personalEmail', me: '$micro1Email' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $gte: ['$date', from] },
+                    { $lte: ['$date', to] },
+                    {
+                      $or: [
+                        { $and: [{ $ne: ['$$pe', null] }, { $eq: ['$expertEmail', '$$pe'] }] },
+                        { $and: [{ $ne: ['$$me', null] }, { $eq: ['$expertEmail', '$$me'] }] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            { $count: 'n' },
+          ],
+          as: '_qc',
+        },
+      },
+      {
         $project: {
-          _id:         0,
-          memberName:  '$hubstaffName',
-          hdm:         1,
+          _id:          0,
+          memberName:   '$hubstaffName',
+          hdm:          1,
           totalSeconds: 1,
+          taskCount:    { $ifNull: [{ $arrayElemAt: ['$_qc.n', 0] }, 0] },
         },
       },
     ]);
@@ -94,6 +121,7 @@ export async function GET(req: NextRequest) {
       hdm:            (doc.hdm as string | null) ?? null,
       totalSeconds:   doc.totalSeconds as number,
       totalFormatted: fromSecs(doc.totalSeconds as number),
+      taskCount:      doc.taskCount as number,
     }));
 
     return NextResponse.json(result);
