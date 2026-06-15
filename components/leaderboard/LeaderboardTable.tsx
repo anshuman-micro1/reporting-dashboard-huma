@@ -8,6 +8,7 @@ type Row = {
   memberName: string;
   hdm: string | null;
   totalFormatted: string;
+  taskCount: number;
 };
 
 export default function LeaderboardTable({ rows, loading, loadError }: { rows: Row[]; loading: boolean; loadError: string }) {
@@ -18,6 +19,14 @@ export default function LeaderboardTable({ rows, loading, loadError }: { rows: R
     { accessorKey: 'memberName', header: 'Expert', cell: info => info.getValue() || '—' },
     { accessorKey: 'hdm', header: 'HDM', cell: info => info.getValue() || '—' },
     { accessorKey: 'totalFormatted', header: 'Total Hours', cell: info => info.getValue() || '—' },
+    {
+      accessorKey: 'taskCount',
+      header: 'QC Tasks',
+      cell: info => {
+        const v = info.getValue() as number;
+        return v > 0 ? v : <span style={{ color: 'var(--text-dim)' }}>—</span>;
+      },
+    },
   ], []);
 
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
@@ -36,11 +45,11 @@ export default function LeaderboardTable({ rows, loading, loadError }: { rows: R
         </thead>
         <tbody>
           {loading ? (
-            <tr className="state-row"><td colSpan={4}><span className="spinner"/>Loading…</td></tr>
+            <tr className="state-row"><td colSpan={5}><span className="spinner"/>Loading…</td></tr>
           ) : loadError ? (
-            <tr className="state-row"><td colSpan={4} style={{ color: '#f87171' }}>Error: {loadError}</td></tr>
+            <tr className="state-row"><td colSpan={5} style={{ color: '#f87171' }}>Error: {loadError}</td></tr>
           ) : data.length === 0 ? (
-            <tr className="state-row"><td colSpan={4}>No activity recorded in this date range</td></tr>
+            <tr className="state-row"><td colSpan={5}>No activity recorded in this date range</td></tr>
           ) : (
             table.getRowModel().rows.map(row => (
               <tr key={row.id}>
