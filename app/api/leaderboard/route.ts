@@ -80,48 +80,38 @@ export async function GET(req: NextRequest) {
       { $limit: 10 },
       {
         $lookup: {
-          from: 'qc_submissions',
-          let:  { pe: '$personalEmail', me: '$micro1Email' },
+          from: 'expert_final_tasks',
+          let:  { me: '$micro1Email', pe: '$personalEmail' },
           pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $gte: ['$date', from] },
-                    { $lte: ['$date', to] },
-                    {
-                      $or: [
-                        { $and: [{ $ne: ['$$pe', null] }, { $eq: ['$expertEmail', '$$pe'] }] },
-                        { $and: [{ $ne: ['$$me', null] }, { $eq: ['$expertEmail', '$$me'] }] },
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-            { $count: 'n' },
+            { $match: { $expr: { $or: [
+              { $and: [{ $ne: ['$$me', null] }, { $eq: ['$expertEmail',   '$$me'] }] },
+              { $and: [{ $ne: ['$$me', null] }, { $eq: ['$personalEmail', '$$me'] }] },
+              { $and: [{ $ne: ['$$pe', null] }, { $eq: ['$expertEmail',   '$$pe'] }] },
+              { $and: [{ $ne: ['$$pe', null] }, { $eq: ['$personalEmail', '$$pe'] }] },
+            ]}}},
+            { $project: { _id: 0, totalFinalTaskCount: 1 } },
           ],
-          as: '_qc',
+          as: '_eft',
         },
       },
       {
         $project: {
-          _id:          0,
-          memberName:   '$hubstaffName',
-          hdm:          1,
-          totalSeconds: 1,
-          taskCount:    { $ifNull: [{ $arrayElemAt: ['$_qc.n', 0] }, 0] },
+          _id:                 0,
+          memberName:          '$hubstaffName',
+          hdm:                 1,
+          totalSeconds:        1,
+          totalFinalTaskCount: { $ifNull: [{ $arrayElemAt: ['$_eft.totalFinalTaskCount', 0] }, null] },
         },
       },
     ]);
 
     const result = docs.map((doc, i) => ({
-      rank:           i + 1,
-      memberName:     doc.memberName  as string,
-      hdm:            (doc.hdm as string | null) ?? null,
-      totalSeconds:   doc.totalSeconds as number,
-      totalFormatted: fromSecs(doc.totalSeconds as number),
-      taskCount:      doc.taskCount as number,
+      rank:                i + 1,
+      memberName:          doc.memberName  as string,
+      hdm:                 (doc.hdm as string | null) ?? null,
+      totalSeconds:        doc.totalSeconds as number,
+      totalFormatted:      fromSecs(doc.totalSeconds as number),
+      totalFinalTaskCount: (doc.totalFinalTaskCount as number | null) ?? null,
     }));
 
     return NextResponse.json(result);

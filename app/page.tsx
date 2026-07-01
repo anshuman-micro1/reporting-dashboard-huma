@@ -21,6 +21,7 @@ interface ReportRow {
   team: string | null;
   dates: Record<string, string>;
   allTasks: Array<{ date: string; tasks: QCTask[] }>;
+  totalFinalTaskCount: number | null;
 }
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -262,9 +263,7 @@ export default function Dashboard() {
     if (huma2Filter && row.team !== 'huma2') return false;
     if (selectedHDM && row.hdm !== selectedHDM) return false;
     if (minTasks > 0 || maxTasks > 0) {
-      const from = dateFrom || allDateCols[0] || '';
-      const to   = dateTo   || allDateCols[allDateCols.length - 1] || '';
-      const n = tasksInRange(row, from, to);
+      const n = row.totalFinalTaskCount ?? 0;
       if (minTasks > 0 && n < minTasks) return false;
       if (maxTasks > 0 && n > maxTasks) return false;
     }
@@ -437,9 +436,7 @@ export default function Dashboard() {
     if (sortCol === 'name') {
       cmp = (a.memberName || '').localeCompare(b.memberName || '');
     } else if (sortCol === 'tasks') {
-      const from = dateFrom || allDateCols[0] || '';
-      const to   = dateTo   || allDateCols[allDateCols.length - 1] || '';
-      cmp = tasksInRange(a, from, to) - tasksInRange(b, from, to);
+      cmp = (a.totalFinalTaskCount ?? 0) - (b.totalFinalTaskCount ?? 0);
     } else if (sortCol === 'total') {
       cmp = toSecs(computeTotal(a, visDateCols)) - toSecs(computeTotal(b, visDateCols));
     } else {
@@ -899,12 +896,9 @@ export default function Dashboard() {
                       <td className="col-memail dim">{row.micro1Email || '—'}</td>
                       <td className="col-hdm dim">{row.hdm || '—'}</td>
                       <td className="col-tasks">
-                        {(() => {
-                          const from = dateFrom || allDateCols[0] || '';
-                          const to   = dateTo   || allDateCols[allDateCols.length - 1] || '';
-                          const n = tasksInRange(row, from, to);
-                          return n > 0 ? <span style={{ fontWeight: 600 }}>{n}</span> : <span className="dim">—</span>;
-                        })()}
+                        {row.totalFinalTaskCount != null
+                          ? <span style={{ fontWeight: 600 }}>{row.totalFinalTaskCount}</span>
+                          : <span className="dim">—</span>}
                       </td>
                       <td className="col-activity">
                         {pct ? (

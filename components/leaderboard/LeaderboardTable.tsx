@@ -8,7 +8,7 @@ type Row = {
   memberName: string;
   hdm: string | null;
   totalFormatted: string;
-  taskCount: number;
+  totalFinalTaskCount: number | null;
 };
 
 export default function LeaderboardTable({ rows, loading, loadError }: { rows: Row[]; loading: boolean; loadError: string }) {
@@ -20,11 +20,11 @@ export default function LeaderboardTable({ rows, loading, loadError }: { rows: R
     { accessorKey: 'hdm', header: 'HDM', cell: info => info.getValue() || '—' },
     { accessorKey: 'totalFormatted', header: 'Total Hours', cell: info => info.getValue() || '—' },
     {
-      accessorKey: 'taskCount',
-      header: 'QC Tasks',
+      accessorKey: 'totalFinalTaskCount',
+      header: 'Tasks',
       cell: info => {
-        const v = info.getValue() as number;
-        return v > 0 ? v : <span style={{ color: 'var(--text-dim)' }}>—</span>;
+        const v = info.getValue() as number | null;
+        return v != null ? v : <span style={{ color: 'var(--text-dim)' }}>—</span>;
       },
     },
   ], []);

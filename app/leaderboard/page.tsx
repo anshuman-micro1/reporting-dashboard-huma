@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import DateRangePicker from '@/components/DateRangePicker';
 import LeaderboardTable from '../../components/leaderboard/LeaderboardTable';
 import { Button } from '../../components/ui/Button';
@@ -12,7 +13,7 @@ interface LeaderboardRow {
   hdm: string | null;
   totalSeconds: number;
   totalFormatted: string;
-  taskCount: number;
+  totalFinalTaskCount: number | null;
 }
 
 function defaultDateRange(): { from: string; to: string } {
@@ -28,11 +29,19 @@ function defaultDateRange(): { from: string; to: string } {
 const DEFAULT_RANGE = defaultDateRange();
 
 export default function LeaderboardPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === 'admin';
+
   const [dateFrom, setDateFrom] = useState(DEFAULT_RANGE.from);
   const [dateTo, setDateTo]     = useState(DEFAULT_RANGE.to);
   const [rows, setRows]         = useState<LeaderboardRow[]>([]);
   const [loading, setLoading]   = useState(true);
   const [loadError, setLoadError] = useState('');
+
+  const [uploadFile, setUploadFile]     = useState<File | null>(null);
+  const [uploading, setUploading]       = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
+  const [uploadError, setUploadError]   = useState('');
 
   useEffect(() => {
     if (!dateFrom || !dateTo) return;
@@ -48,6 +57,24 @@ export default function LeaderboardPage() {
       .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : 'Unknown error'))
       .finally(() => setLoading(false));
   }, [dateFrom, dateTo]);
+
+  async function handleTaskUpload() {
+    if (!uploadFile) { setUploadError('Choose a file first.'); return; }
+    setUploading(true); setUploadError(''); setUploadMessage('');
+    try {
+      const form = new FormData();
+      form.append('file', uploadFile);
+      const res = await fetch('/api/leaderboard/upload-tasks', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Upload failed');
+      setUploadMessage(`Done — upserted: ${data.upserted}, modified: ${data.modified}${data.skipped > 0 ? `, skipped: ${data.skipped}` : ''}.`);
+      setUploadFile(null);
+      // Refresh leaderboard to reflect updated counts
+      const r2 = await fetch(`/api/leaderboard?from=${dateFrom}&to=${dateTo}`);
+      if (r2.ok) setRows(await r2.json());
+    } catch (e: unknown) { setUploadError(e instanceof Error ? e.message : 'Unknown error'); }
+    finally { setUploading(false); }
+  }
 
   const periodDays = (() => {
     if (!dateFrom || !dateTo) return 0;
@@ -100,6 +127,26 @@ export default function LeaderboardPage() {
           to={dateTo}
           onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
         />
+
+        {isAdmin && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 18 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>Upload Task Counts (CSV: expert_email, total_task)</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={e => { setUploadFile(e.target.files?.[0] || null); setUploadMessage(''); setUploadError(''); }}
+                style={{ fontSize: 13 }}
+              />
+              <Button variant="secondary" onClick={handleTaskUpload} disabled={uploading || !uploadFile}>
+                {uploading ? 'Uploading…' : 'Upload'}
+              </Button>
+              {uploadFile && <span style={{ fontSize: 12, color: 'var(--text)' }}>{uploadFile.name}</span>}
+            </div>
+            {uploadMessage && <div style={{ color: '#4ade80', marginTop: 8, fontSize: 13, whiteSpace: 'pre-wrap' }}>{uploadMessage}</div>}
+            {uploadError   && <div style={{ color: '#f87171', marginTop: 8, fontSize: 13 }}>{uploadError}</div>}
+          </div>
+        )}
 
         <LeaderboardTable rows={rows} loading={loading} loadError={loadError} />
       </main>
